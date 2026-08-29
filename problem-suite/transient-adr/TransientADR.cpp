@@ -24,8 +24,7 @@ TransientADR::setup()
     {
       GridTools::partition_triangulation(mpi_size, mesh_serial);
 
-      const auto construction_data = TriangulationDescription::Utilities::
-        create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
+      const auto construction_data = TriangulationDescription::Utilities::create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
       mesh.create_triangulation(construction_data);
     }
 
@@ -71,12 +70,10 @@ TransientADR::setup()
     pcout << "Initializing the linear system" << std::endl;
 
     const IndexSet locally_owned_dofs = dof_handler.locally_owned_dofs();
-    const IndexSet locally_relevant_dofs =
-      DoFTools::extract_locally_relevant_dofs(dof_handler);
+    const IndexSet locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
 
     pcout << "  Initializing the sparsity pattern" << std::endl;
-    TrilinosWrappers::SparsityPattern sparsity(locally_owned_dofs,
-                                               MPI_COMM_WORLD);
+    TrilinosWrappers::SparsityPattern sparsity(locally_owned_dofs,MPI_COMM_WORLD);
     DoFTools::make_sparsity_pattern(dof_handler, sparsity);
     sparsity.compress();
 
@@ -145,8 +142,7 @@ TransientADR::assemble()
           const Tensor<1, dim> beta_loc = beta(fe_values.quadrature_point(q));
           const double sigma_loc = sigma(fe_values.quadrature_point(q));
 
-          const double f_old_loc =
-            f(fe_values.quadrature_point(q), time - delta_t);
+          const double f_old_loc = f(fe_values.quadrature_point(q), time - delta_t);
           const double f_new_loc = f(fe_values.quadrature_point(q), time);
 
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
@@ -216,8 +212,7 @@ TransientADR::assemble()
             if (!cell->face(face)->at_boundary())
               continue;
 
-            const auto condition =
-              neumann_conditions.find(cell->face(face)->boundary_id());
+            const auto condition = neumann_conditions.find(cell->face(face)->boundary_id());
             if (condition == neumann_conditions.end())
               continue;
 
@@ -253,19 +248,15 @@ TransientADR::assemble()
     }
 
   std::map<types::global_dof_index, double> boundary_values;
-  VectorTools::interpolate_boundary_values(dof_handler,
-                                           boundary_functions,
-                                           boundary_values);
-  MatrixTools::apply_boundary_values(
-    boundary_values, system_matrix, solution_owned, system_rhs, false);
+  VectorTools::interpolate_boundary_values(dof_handler, boundary_functions, boundary_values);
+  MatrixTools::apply_boundary_values(boundary_values, system_matrix, solution_owned, system_rhs, false);
 }
 
 void
 TransientADR::solve_linear_system()
 {
   TrilinosWrappers::PreconditionSSOR preconditioner;
-  preconditioner.initialize(
-    system_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
+  preconditioner.initialize(system_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
 
   ReductionControl solver_control(/* maxiter = */ 10000,
                                   /* tolerance = */ 1.0e-16,
@@ -295,8 +286,7 @@ TransientADR::output()
   const std::filesystem::path mesh_path(mesh_file_name);
   const std::string output_file_name = "output-" + mesh_path.stem().string();
 
-  const std::string pvtu_file_name =
-    data_out.write_vtu_with_pvtu_record(/* folder = */ "./",
+  const std::string pvtu_file_name = data_out.write_vtu_with_pvtu_record(/* folder = */ "./",
                                         /* basename = */ output_file_name,
                                         /* index = */ timestep_number,
                                         MPI_COMM_WORLD);
