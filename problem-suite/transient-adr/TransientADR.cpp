@@ -278,7 +278,7 @@ TransientADR::solve_linear_system()
 }
 
 void
-TransientADR::output() const
+TransientADR::output()
 {
   DataOut<dim> data_out;
 
@@ -295,15 +295,25 @@ TransientADR::output() const
   const std::filesystem::path mesh_path(mesh_file_name);
   const std::string output_file_name = "output-" + mesh_path.stem().string();
 
-  data_out.write_vtu_with_pvtu_record(/* folder = */ "./",
-                                      /* basename = */ output_file_name,
-                                      /* index = */ timestep_number,
-                                      MPI_COMM_WORLD);
+  const std::string pvtu_file_name =
+    data_out.write_vtu_with_pvtu_record(/* folder = */ "./",
+                                        /* basename = */ output_file_name,
+                                        /* index = */ timestep_number,
+                                        MPI_COMM_WORLD);
+
+  if (mpi_rank == 0)
+    {
+      times_and_names.emplace_back(time, pvtu_file_name);
+      std::ofstream pvd_output(output_file_name + ".pvd");
+      DataOutBase::write_pvd_record(pvd_output, times_and_names);
+    }
 }
 
 void
 TransientADR::run()
 {
+  times_and_names.clear();
+
   // Setup initial conditions.
   {
     setup();

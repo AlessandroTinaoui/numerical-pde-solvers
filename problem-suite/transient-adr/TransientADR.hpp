@@ -118,7 +118,7 @@ protected:
 
   // Output.
   void
-  output() const;
+  output();
 
   // Name of the mesh.
   const std::string mesh_file_name;
@@ -140,6 +140,9 @@ protected:
 
   // Current timestep number.
   unsigned int timestep_number = 0;
+
+  // Physical times and corresponding PVTU files for ParaView.
+  std::vector<std::pair<double, std::string>> times_and_names;
 
   // Diffusion coefficient.
   ScalarFunction mu;
