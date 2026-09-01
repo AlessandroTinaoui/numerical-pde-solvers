@@ -11,6 +11,8 @@ find_package(deal.II 9.3.1 REQUIRED
   HINTS ${DEAL_II_DIR} $ENV{DEAL_II_DIR} $ENV{mkDealiiPrefix})
 deal_ii_initialize_cached_variables()
 
-add_executable(exercise exercise.cpp Poisson2D.cpp)
-deal_ii_setup_target(exercise)
+add_executable(exercise-dn exercise-dn.cpp DiffusionReactionDN.cpp)
+deal_ii_setup_target(exercise-dn)
 
+add_executable(exercise-dd exercise-dd.cpp DiffusionReactionDD.cpp)
+deal_ii_setup_target(exercise-dd)
