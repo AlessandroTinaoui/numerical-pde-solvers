@@ -16,3 +16,9 @@ deal_ii_setup_target(exercise-dn)
 
 add_executable(exercise-dd exercise-dd.cpp DiffusionReactionDD.cpp)
 deal_ii_setup_target(exercise-dd)
+
+add_custom_target(data-cleanup
+  COMMAND ${CMAKE_COMMAND}
+    -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/DataCleanup.cmake
+  COMMENT "Removing generated solution data")

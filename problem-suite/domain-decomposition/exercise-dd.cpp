@@ -75,8 +75,7 @@ main(int argc, char *argv[])
       problem_1.apply_interface_dirichlet(problem_0);
       problem_1.solve();
 
-      correction_norm =
-        problem_0.apply_interface_correction(problem_1, lambda, smoothing);
+      correction_norm = problem_0.apply_interface_correction(problem_1, lambda, smoothing);
 
       std::cout << "iteration " << n_iter
                 << " - interface correction = " << correction_norm

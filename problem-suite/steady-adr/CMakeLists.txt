@@ -16,3 +16,9 @@ deal_ii_setup_target(exercise)
 
 add_executable(cycle cycle.cpp SteadyADR.cpp)
 deal_ii_setup_target(cycle)
+
+add_custom_target(data-cleanup
+  COMMAND ${CMAKE_COMMAND}
+    -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/DataCleanup.cmake
+  COMMENT "Removing generated solution data")

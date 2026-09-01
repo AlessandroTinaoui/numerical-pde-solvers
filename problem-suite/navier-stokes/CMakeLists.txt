@@ -14,3 +14,8 @@ deal_ii_initialize_cached_variables()
 add_executable(exercise exercise.cpp NavierStokes.cpp)
 deal_ii_setup_target(exercise)
 
+add_custom_target(data-cleanup
+  COMMAND ${CMAKE_COMMAND}
+    -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/DataCleanup.cmake
+  COMMENT "Removing generated solution data")
