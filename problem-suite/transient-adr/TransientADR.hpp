@@ -44,9 +44,9 @@ public:
   // Physical dimension (1D, 2D, 3D)
   static constexpr unsigned int dim = 3;
 
-  using ScalarFunction = std::function<double(const Point<dim> &)>;
-  using VectorFunction = std::function<Tensor<1, dim>(const Point<dim> &)>;
-  using TimeFunction = std::function<double(const Point<dim> &, double)>;
+  using ScalarFunction     = std::function<double(const Point<dim> &)>;
+  using VectorFunction     = std::function<Tensor<1, dim>(const Point<dim> &)>;
+  using TimeFunction       = std::function<double(const Point<dim> &, double)>;
   using BoundaryConditions = std::map<types::boundary_id, TimeFunction>;
 
   // Adapter from a lambda to a deal.II Function.
@@ -69,16 +69,16 @@ public:
   };
 
   // Constructor.
-  TransientADR(const std::string &mesh_file_name_,
-               const unsigned int r_,
-               const double T_,
-               const double theta_,
-               const double delta_t_,
-               const ScalarFunction &mu_,
-               const VectorFunction &beta_,
-               const ScalarFunction &sigma_,
-               const TimeFunction &f_,
-               const TimeFunction &initial_condition_,
+  TransientADR(const std::string        &mesh_file_name_,
+               const unsigned int        r_,
+               const double              T_,
+               const double              theta_,
+               const double              delta_t_,
+               const ScalarFunction     &mu_,
+               const VectorFunction     &beta_,
+               const ScalarFunction     &sigma_,
+               const TimeFunction       &f_,
+               const TimeFunction       &initial_condition_,
                const BoundaryConditions &dirichlet_conditions_,
                const BoundaryConditions &neumann_conditions_)
     : mesh_file_name(mesh_file_name_)
@@ -100,25 +100,20 @@ public:
   {}
 
   // Run the time-dependent simulation.
-  void
-  run();
+  void run();
 
 protected:
   // Initialization.
-  void
-  setup();
+  void setup();
 
   // System assembly.
-  void
-  assemble();
+  void assemble();
 
   // System solution.
-  void
-  solve_linear_system();
+  void solve_linear_system();
 
   // Output.
-  void
-  output();
+  void output();
 
   // Name of the mesh.
   const std::string mesh_file_name;

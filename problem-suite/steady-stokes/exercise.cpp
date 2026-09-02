@@ -10,8 +10,7 @@ public:
     : Function<dim>(dim + 1)
   {}
 
-  virtual double
-  value(const Point<dim> &p, const unsigned int component = 0) const override
+  virtual double value(const Point<dim> &p, const unsigned int component = 0) const override
   {
     if (component == 0)
       return -p[1] * (2.0 - p[1]) * (1.0 - p[2]) * (2.0 - p[2]);
@@ -21,8 +20,7 @@ public:
 };
 
 // Main function.
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
   Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv);
 
@@ -31,11 +29,9 @@ main(int argc, char *argv[])
   const unsigned int degree_pressure = 1;
 
   // Problem coefficients.
-  const auto mu = [](const Point<dim> &) { return 1.0; };
-  const auto alpha = [](const Point<dim> &) { return 0.0; };
-  const auto forcing = [](const Point<dim> &) {
-    return Tensor<1, dim>();
-  };
+  const auto mu      = [](const Point<dim> &) { return 1.0; };
+  const auto alpha   = [](const Point<dim> &) { return 0.0; };
+  const auto forcing = [](const Point<dim> &) { return Tensor<1, dim>(); };
 
   // Boundary conditions.
   InletVelocity                inlet_velocity;
@@ -48,21 +44,11 @@ main(int argc, char *argv[])
   dirichlet[1] = &zero_velocity;
 
   const double p_out = 10.0;
-  traction[2] = [p_out](const Point<dim> &, const Tensor<1, dim> &normal) {
-    return -p_out * normal;
-  };
+  traction[2]        = [p_out](const Point<dim> &, const Tensor<1, dim> &normal) { return -p_out * normal; };
 
   const bool fix_pressure_nullspace = false;
 
-  SteadyStokes<dim> problem(mesh_file_name,
-                            degree_velocity,
-                            degree_pressure,
-                            mu,
-                            alpha,
-                            forcing,
-                            dirichlet,
-                            traction,
-                            fix_pressure_nullspace);
+  SteadyStokes<dim> problem(mesh_file_name, degree_velocity, degree_pressure, mu, alpha, forcing, dirichlet, traction, fix_pressure_nullspace);
 
   problem.setup();
   problem.assemble();

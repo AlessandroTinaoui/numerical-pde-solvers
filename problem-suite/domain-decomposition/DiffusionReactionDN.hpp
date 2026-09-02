@@ -36,21 +36,19 @@ class DiffusionReactionDN
 public:
   static constexpr unsigned int dim = 2;
 
-  using ScalarFunction = std::function<double(const Point<dim> &)>;
-  using DirichletConditions =
-    std::map<types::boundary_id, const Function<dim> *>;
-  using NeumannConditions =
-    std::map<types::boundary_id, ScalarFunction>;
+  using ScalarFunction      = std::function<double(const Point<dim> &)>;
+  using DirichletConditions = std::map<types::boundary_id, const Function<dim> *>;
+  using NeumannConditions   = std::map<types::boundary_id, ScalarFunction>;
 
-  DiffusionReactionDN(const unsigned int subdomain_id_,
-                      const std::string &mesh_file_name_,
-                      const unsigned int degree_,
-                      const types::boundary_id interface_id_,
-                      const ScalarFunction &alpha_,
-                      const ScalarFunction &gamma_,
-                      const ScalarFunction &f_,
+  DiffusionReactionDN(const unsigned int         subdomain_id_,
+                      const std::string         &mesh_file_name_,
+                      const unsigned int         degree_,
+                      const types::boundary_id   interface_id_,
+                      const ScalarFunction      &alpha_,
+                      const ScalarFunction      &gamma_,
+                      const ScalarFunction      &f_,
                       const DirichletConditions &dirichlet_conditions_,
-                      const NeumannConditions &neumann_conditions_)
+                      const NeumannConditions   &neumann_conditions_)
     : subdomain_id(subdomain_id_)
     , mesh_file_name(mesh_file_name_)
     , degree(degree_)
@@ -67,43 +65,40 @@ public:
   void solve();
   void output(const unsigned int iteration) const;
 
-  void apply_interface_dirichlet(const DiffusionReactionDN &other);
-  double apply_interface_neumann(DiffusionReactionDN &other,
-                                 const double lambda = 1.0);
+  void   apply_interface_dirichlet(const DiffusionReactionDN &other);
+  double apply_interface_neumann(DiffusionReactionDN &other, const double lambda = 1.0);
 
   const Vector<double> &get_solution() const;
-  void apply_relaxation(const Vector<double> &old_solution,
-                        const double lambda);
+  void                  apply_relaxation(const Vector<double> &old_solution, const double lambda);
 
 protected:
-  std::map<types::global_dof_index, types::global_dof_index>
-  compute_interface_map(const DiffusionReactionDN &other) const;
+  std::map<types::global_dof_index, types::global_dof_index> compute_interface_map(const DiffusionReactionDN &other) const;
 
   Vector<double> compute_interface_residual();
 
-  const unsigned int subdomain_id;
-  const std::string mesh_file_name;
-  const unsigned int degree;
+  const unsigned int       subdomain_id;
+  const std::string        mesh_file_name;
+  const unsigned int       degree;
   const types::boundary_id interface_id;
 
-  ScalarFunction alpha;
-  ScalarFunction gamma;
-  ScalarFunction f;
+  ScalarFunction      alpha;
+  ScalarFunction      gamma;
+  ScalarFunction      f;
   DirichletConditions dirichlet_conditions;
-  NeumannConditions neumann_conditions;
+  NeumannConditions   neumann_conditions;
 
-  Triangulation<dim> mesh;
-  std::unique_ptr<FiniteElement<dim>> fe;
-  std::unique_ptr<Quadrature<dim>> quadrature;
-  std::unique_ptr<Quadrature<dim - 1>> quadrature_boundary;
-  DoFHandler<dim> dof_handler;
+  Triangulation<dim>                            mesh;
+  std::unique_ptr<FiniteElement<dim>>           fe;
+  std::unique_ptr<Quadrature<dim>>              quadrature;
+  std::unique_ptr<Quadrature<dim - 1>>          quadrature_boundary;
+  DoFHandler<dim>                               dof_handler;
   std::map<types::global_dof_index, Point<dim>> support_points;
 
-  SparsityPattern sparsity_pattern;
+  SparsityPattern      sparsity_pattern;
   SparseMatrix<double> system_matrix;
-  Vector<double> system_rhs;
-  Vector<double> solution;
-  Vector<double> interface_neumann_data;
+  Vector<double>       system_rhs;
+  Vector<double>       solution;
+  Vector<double>       interface_neumann_data;
 };
 
 #endif

@@ -51,14 +51,14 @@ public:
 
   // Constructor for a mesh read from a .msh file.
   SteadyADR(const std::string         &mesh_file_name_,
-          const unsigned int        &r_,
-          const ScalarFunction      &mu_,
-          const VectorFunction      &beta_,
-          const ScalarFunction      &sigma_,
-          const ScalarFunction      &f_,
-          const DirichletConditions &dirichlet_conditions_,
-          const NeumannConditions   &neumann_conditions_,
-          const bool                 fix_nullspace_ = true)
+            const unsigned int        &r_,
+            const ScalarFunction      &mu_,
+            const VectorFunction      &beta_,
+            const ScalarFunction      &sigma_,
+            const ScalarFunction      &f_,
+            const DirichletConditions &dirichlet_conditions_,
+            const NeumannConditions   &neumann_conditions_,
+            const bool                 fix_nullspace_ = true)
     : mesh_file_name(mesh_file_name_)
     , N_el(0)
     , generate_mesh_1d(false)
@@ -79,14 +79,14 @@ public:
   // Constructor for an automatically generated mesh of the unit interval.
   // This constructor is used for SteadyADR<1>.
   SteadyADR(const unsigned int        &N_el_,
-          const unsigned int        &r_,
-          const ScalarFunction      &mu_,
-          const VectorFunction      &beta_,
-          const ScalarFunction      &sigma_,
-          const ScalarFunction      &f_,
-          const DirichletConditions &dirichlet_conditions_,
-          const NeumannConditions   &neumann_conditions_,
-          const bool                 fix_nullspace_ = true)
+            const unsigned int        &r_,
+            const ScalarFunction      &mu_,
+            const VectorFunction      &beta_,
+            const ScalarFunction      &sigma_,
+            const ScalarFunction      &f_,
+            const DirichletConditions &dirichlet_conditions_,
+            const NeumannConditions   &neumann_conditions_,
+            const bool                 fix_nullspace_ = true)
     : N_el(N_el_)
     , generate_mesh_1d(true)
     , r(r_)
@@ -104,25 +104,19 @@ public:
   {}
 
   // Initialization.
-  void
-  setup();
+  void setup();
 
   // System assembly.
-  void
-  assemble();
+  void assemble();
 
   // System solution.
-  void
-  solve();
+  void solve();
 
   // Output.
-  void
-  output() const;
+  void output() const;
 
   // Compute the error against a given exact solution.
-  double
-  compute_error(const VectorTools::NormType &norm_type,
-                const Function<dim>         &exact_solution) const;
+  double compute_error(const VectorTools::NormType &norm_type, const Function<dim> &exact_solution) const;
 
 protected:
   // Name of the mesh file. It is empty for automatically generated meshes.

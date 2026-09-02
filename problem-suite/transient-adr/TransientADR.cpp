@@ -1,7 +1,6 @@
 #include "TransientADR.hpp"
 
-void
-TransientADR::setup()
+void TransientADR::setup()
 {
   pcout << "===============================================" << std::endl;
 
@@ -28,8 +27,7 @@ TransientADR::setup()
       mesh.create_triangulation(construction_data);
     }
 
-    pcout << "  Number of elements = " << mesh.n_global_active_cells()
-          << std::endl;
+    pcout << "  Number of elements = " << mesh.n_global_active_cells() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -41,14 +39,12 @@ TransientADR::setup()
     fe = std::make_unique<FE_SimplexP<dim>>(r);
 
     pcout << "  Degree                     = " << fe->degree << std::endl;
-    pcout << "  DoFs per cell              = " << fe->dofs_per_cell
-          << std::endl;
+    pcout << "  DoFs per cell              = " << fe->dofs_per_cell << std::endl;
 
-    quadrature = std::make_unique<QGaussSimplex<dim>>(r + 1);
+    quadrature          = std::make_unique<QGaussSimplex<dim>>(r + 1);
     quadrature_boundary = std::make_unique<QGaussSimplex<dim - 1>>(r + 1);
 
-    pcout << "  Quadrature points per cell = " << quadrature->size()
-          << std::endl;
+    pcout << "  Quadrature points per cell = " << quadrature->size() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -69,11 +65,11 @@ TransientADR::setup()
   {
     pcout << "Initializing the linear system" << std::endl;
 
-    const IndexSet locally_owned_dofs = dof_handler.locally_owned_dofs();
+    const IndexSet locally_owned_dofs    = dof_handler.locally_owned_dofs();
     const IndexSet locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
 
     pcout << "  Initializing the sparsity pattern" << std::endl;
-    TrilinosWrappers::SparsityPattern sparsity(locally_owned_dofs,MPI_COMM_WORLD);
+    TrilinosWrappers::SparsityPattern sparsity(locally_owned_dofs, MPI_COMM_WORLD);
     DoFTools::make_sparsity_pattern(dof_handler, sparsity);
     sparsity.compress();
 
@@ -87,8 +83,7 @@ TransientADR::setup()
   }
 }
 
-void
-TransientADR::assemble()
+void TransientADR::assemble()
 {
   // Number of local DoFs for each element.
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
@@ -96,14 +91,8 @@ TransientADR::assemble()
   // Number of quadrature points for each element.
   const unsigned int n_q = quadrature->size();
 
-  FEValues<dim> fe_values(*fe,
-                          *quadrature,
-                          update_values | update_gradients |
-                            update_quadrature_points | update_JxW_values);
-  FEFaceValues<dim> fe_face_values(*fe,
-                                   *quadrature_boundary,
-                                   update_values | update_quadrature_points |
-                                     update_JxW_values);
+  FEValues<dim>     fe_values(*fe, *quadrature, update_values | update_gradients | update_quadrature_points | update_JxW_values);
+  FEFaceValues<dim> fe_face_values(*fe, *quadrature_boundary, update_values | update_quadrature_points | update_JxW_values);
 
   // Local matrix and vector.
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
@@ -138,9 +127,9 @@ TransientADR::assemble()
 
       for (unsigned int q = 0; q < n_q; ++q)
         {
-          const double mu_loc = mu(fe_values.quadrature_point(q));
-          const Tensor<1, dim> beta_loc = beta(fe_values.quadrature_point(q));
-          const double sigma_loc = sigma(fe_values.quadrature_point(q));
+          const double         mu_loc    = mu(fe_values.quadrature_point(q));
+          const Tensor<1, dim> beta_loc  = beta(fe_values.quadrature_point(q));
+          const double         sigma_loc = sigma(fe_values.quadrature_point(q));
 
           const double f_old_loc = f(fe_values.quadrature_point(q), time - delta_t);
           const double f_new_loc = f(fe_values.quadrature_point(q), time);
@@ -156,23 +145,16 @@ TransientADR::assemble()
                                        fe_values.JxW(q);
 
                   // Diffusion.
-                  cell_matrix(i, j) +=
-                    theta * mu_loc *                             //
-                    scalar_product(fe_values.shape_grad(i, q),   //
-                                   fe_values.shape_grad(j, q)) * //
-                    fe_values.JxW(q);
+                  cell_matrix(i, j) += theta * mu_loc *                             //
+                                       scalar_product(fe_values.shape_grad(i, q),   //
+                                                      fe_values.shape_grad(j, q)) * //
+                                       fe_values.JxW(q);
 
                   // Transport.
-                  cell_matrix(i, j) += theta *
-                                       (beta_loc * fe_values.shape_grad(j, q)) *
-                                       fe_values.shape_value(i, q) *
-                                       fe_values.JxW(q);
+                  cell_matrix(i, j) += theta * (beta_loc * fe_values.shape_grad(j, q)) * fe_values.shape_value(i, q) * fe_values.JxW(q);
 
                   // Reaction.
-                  cell_matrix(i, j) += theta * sigma_loc *
-                                       fe_values.shape_value(i, q) *
-                                       fe_values.shape_value(j, q) *
-                                       fe_values.JxW(q);
+                  cell_matrix(i, j) += theta * sigma_loc * fe_values.shape_value(i, q) * fe_values.shape_value(j, q) * fe_values.JxW(q);
                 }
 
               // Time derivative.
@@ -188,20 +170,15 @@ TransientADR::assemble()
                              fe_values.JxW(q);
 
               // Transport.
-              cell_rhs(i) -= (1.0 - theta) *
-                             (beta_loc * solution_old_grads[q]) *
-                             fe_values.shape_value(i, q) * fe_values.JxW(q);
+              cell_rhs(i) -= (1.0 - theta) * (beta_loc * solution_old_grads[q]) * fe_values.shape_value(i, q) * fe_values.JxW(q);
 
               // Reaction.
-              cell_rhs(i) -= (1.0 - theta) * sigma_loc *
-                             solution_old_values[q] *
-                             fe_values.shape_value(i, q) * fe_values.JxW(q);
+              cell_rhs(i) -= (1.0 - theta) * sigma_loc * solution_old_values[q] * fe_values.shape_value(i, q) * fe_values.JxW(q);
 
               // Forcing term.
-              cell_rhs(i) +=
-                (theta * f_new_loc + (1.0 - theta) * f_old_loc) * //
-                fe_values.shape_value(i, q) *                     //
-                fe_values.JxW(q);
+              cell_rhs(i) += (theta * f_new_loc + (1.0 - theta) * f_old_loc) * //
+                             fe_values.shape_value(i, q) *                     //
+                             fe_values.JxW(q);
             }
         }
 
@@ -221,11 +198,8 @@ TransientADR::assemble()
               for (unsigned int i = 0; i < dofs_per_cell; ++i)
                 {
                   const Point<dim> &point = fe_face_values.quadrature_point(q);
-                  const double h = theta * condition->second(point, time) +
-                                   (1.0 - theta) *
-                                     condition->second(point, time - delta_t);
-                  cell_rhs(i) += h * fe_face_values.shape_value(i, q) *
-                                 fe_face_values.JxW(q);
+                  const double      h     = theta * condition->second(point, time) + (1.0 - theta) * condition->second(point, time - delta_t);
+                  cell_rhs(i) += h * fe_face_values.shape_value(i, q) * fe_face_values.JxW(q);
                 }
           }
 
@@ -240,10 +214,10 @@ TransientADR::assemble()
 
   // Dirichlet boundary conditions at the new time.
   std::map<types::boundary_id, std::unique_ptr<FunctionWrapper>> wrappers;
-  std::map<types::boundary_id, const Function<dim> *> boundary_functions;
+  std::map<types::boundary_id, const Function<dim> *>            boundary_functions;
   for (const auto &[boundary_id, function] : dirichlet_conditions)
     {
-      wrappers[boundary_id] = std::make_unique<FunctionWrapper>(function, time);
+      wrappers[boundary_id]           = std::make_unique<FunctionWrapper>(function, time);
       boundary_functions[boundary_id] = wrappers[boundary_id].get();
     }
 
@@ -252,8 +226,7 @@ TransientADR::assemble()
   MatrixTools::apply_boundary_values(boundary_values, system_matrix, solution_owned, system_rhs, false);
 }
 
-void
-TransientADR::solve_linear_system()
+void TransientADR::solve_linear_system()
 {
   TrilinosWrappers::PreconditionSSOR preconditioner;
   preconditioner.initialize(system_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
@@ -268,8 +241,7 @@ TransientADR::solve_linear_system()
   pcout << solver_control.last_step() << " GMRES iterations" << std::endl;
 }
 
-void
-TransientADR::output()
+void TransientADR::output()
 {
   DataOut<dim> data_out;
 
@@ -284,12 +256,12 @@ TransientADR::output()
   data_out.build_patches();
 
   const std::filesystem::path mesh_path(mesh_file_name);
-  const std::string output_file_name = "output-" + mesh_path.stem().string();
+  const std::string           output_file_name = "output-" + mesh_path.stem().string();
 
   const std::string pvtu_file_name = data_out.write_vtu_with_pvtu_record(/* folder = */ "./",
-                                        /* basename = */ output_file_name,
-                                        /* index = */ timestep_number,
-                                        MPI_COMM_WORLD);
+                                                                         /* basename = */ output_file_name,
+                                                                         /* index = */ timestep_number,
+                                                                         MPI_COMM_WORLD);
 
   if (mpi_rank == 0)
     {
@@ -299,8 +271,7 @@ TransientADR::output()
     }
 }
 
-void
-TransientADR::run()
+void TransientADR::run()
 {
   times_and_names.clear();
 
@@ -327,9 +298,7 @@ TransientADR::run()
       time += delta_t;
       ++timestep_number;
 
-      pcout << "Timestep " << std::setw(3) << timestep_number
-            << ", time = " << std::setw(4) << std::fixed << std::setprecision(2)
-            << time << " : ";
+      pcout << "Timestep " << std::setw(3) << timestep_number << ", time = " << std::setw(4) << std::fixed << std::setprecision(2) << time << " : ";
 
       assemble();
       solve_linear_system();

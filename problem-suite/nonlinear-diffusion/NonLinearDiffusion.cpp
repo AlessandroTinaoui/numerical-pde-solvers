@@ -1,7 +1,6 @@
 #include "NonLinearDiffusion.hpp"
 
-void
-NonLinearDiffusion::setup()
+void NonLinearDiffusion::setup()
 {
   // Create the mesh.
   {
@@ -22,15 +21,13 @@ NonLinearDiffusion::setup()
     // Then, we copy the triangulation into the parallel one.
     {
       GridTools::partition_triangulation(mpi_size, mesh_serial);
-      const auto construction_data = TriangulationDescription::Utilities::
-        create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
+      const auto construction_data = TriangulationDescription::Utilities::create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
       mesh.create_triangulation(construction_data);
     }
 
     // Notice that we write here the number of *global* active cells (across all
     // processes).
-    pcout << "  Number of elements = " << mesh.n_global_active_cells()
-          << std::endl;
+    pcout << "  Number of elements = " << mesh.n_global_active_cells() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -42,13 +39,11 @@ NonLinearDiffusion::setup()
     fe = std::make_unique<FE_SimplexP<dim>>(r);
 
     pcout << "  Degree                     = " << fe->degree << std::endl;
-    pcout << "  DoFs per cell              = " << fe->dofs_per_cell
-          << std::endl;
+    pcout << "  DoFs per cell              = " << fe->dofs_per_cell << std::endl;
 
     quadrature = std::make_unique<QGaussSimplex<dim>>(r + 1);
 
-    pcout << "  Quadrature points per cell = " << quadrature->size()
-          << std::endl;
+    pcout << "  Quadrature points per cell = " << quadrature->size() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -62,9 +57,8 @@ NonLinearDiffusion::setup()
 
     // We retrieve the set of locally owned DoFs, which will be useful when
     // initializing linear algebra classes.
-    locally_owned_dofs = dof_handler.locally_owned_dofs();
-    locally_relevant_dofs =
-      DoFTools::extract_locally_relevant_dofs(dof_handler);
+    locally_owned_dofs    = dof_handler.locally_owned_dofs();
+    locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
 
     pcout << "  Number of DoFs = " << dof_handler.n_dofs() << std::endl;
   }
@@ -79,8 +73,7 @@ NonLinearDiffusion::setup()
 
     // To initialize the sparsity pattern, we use Trilinos' class, that manages
     // some of the inter-process communication.
-    TrilinosWrappers::SparsityPattern sparsity(locally_owned_dofs,
-                                               MPI_COMM_WORLD);
+    TrilinosWrappers::SparsityPattern sparsity(locally_owned_dofs, MPI_COMM_WORLD);
     DoFTools::make_sparsity_pattern(dof_handler, sparsity);
 
     // After initialization, we need to call compress, so that all process
@@ -103,16 +96,12 @@ NonLinearDiffusion::setup()
   }
 }
 
-void
-NonLinearDiffusion::assemble_system()
+void NonLinearDiffusion::assemble_system()
 {
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
   const unsigned int n_q           = quadrature->size();
 
-  FEValues<dim> fe_values(*fe,
-                          *quadrature,
-                          update_values | update_gradients |
-                            update_quadrature_points | update_JxW_values);
+  FEValues<dim> fe_values(*fe, *quadrature, update_values | update_gradients | update_quadrature_points | update_JxW_values);
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double>     cell_rhs(dofs_per_cell);
@@ -155,30 +144,19 @@ NonLinearDiffusion::assemble_system()
             {
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
-                  cell_matrix(i, j) +=
-                    (2.0 * mu_1_loc * solution_loc[q] *
-                     fe_values.shape_value(j, q)) *
-                    scalar_product(solution_gradient_loc[q],
-                                   fe_values.shape_grad(i, q)) *
-                    fe_values.JxW(q);
+                  cell_matrix(i, j) += (2.0 * mu_1_loc * solution_loc[q] * fe_values.shape_value(j, q)) *
+                                       scalar_product(solution_gradient_loc[q], fe_values.shape_grad(i, q)) * fe_values.JxW(q);
 
-                  cell_matrix(i, j) +=
-                    (mu_0_loc + mu_1_loc * solution_loc[q] * solution_loc[q]) *
-                    scalar_product(fe_values.shape_grad(j, q),
-                                   fe_values.shape_grad(i, q)) *
-                    fe_values.JxW(q);
+                  cell_matrix(i, j) += (mu_0_loc + mu_1_loc * solution_loc[q] * solution_loc[q]) *
+                                       scalar_product(fe_values.shape_grad(j, q), fe_values.shape_grad(i, q)) * fe_values.JxW(q);
                 }
 
               // -F(v)
-              cell_rhs(i) +=
-                f_loc * fe_values.shape_value(i, q) * fe_values.JxW(q);
+              cell_rhs(i) += f_loc * fe_values.shape_value(i, q) * fe_values.JxW(q);
 
               // a(u, v)
-              cell_rhs(i) -=
-                (mu_0_loc + mu_1_loc * solution_loc[q] * solution_loc[q]) *
-                scalar_product(solution_gradient_loc[q],
-                               fe_values.shape_grad(i, q)) *
-                fe_values.JxW(q);
+              cell_rhs(i) -= (mu_0_loc + mu_1_loc * solution_loc[q] * solution_loc[q]) *
+                             scalar_product(solution_gradient_loc[q], fe_values.shape_grad(i, q)) * fe_values.JxW(q);
             }
         }
 
@@ -201,32 +179,25 @@ NonLinearDiffusion::assemble_system()
     for (unsigned int i = 0; i < 6; ++i)
       boundary_functions[i] = &zero_function;
 
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values);
+    VectorTools::interpolate_boundary_values(dof_handler, boundary_functions, boundary_values);
 
-    MatrixTools::apply_boundary_values(
-      boundary_values, jacobian_matrix, delta_owned, residual_vector, true);
+    MatrixTools::apply_boundary_values(boundary_values, jacobian_matrix, delta_owned, residual_vector, true);
   }
 }
 
-void
-NonLinearDiffusion::solve_system()
+void NonLinearDiffusion::solve_system()
 {
   SolverControl solver_control(1000, 1e-6 * residual_vector.l2_norm());
 
   SolverGMRES<TrilinosWrappers::MPI::Vector> solver(solver_control);
   TrilinosWrappers::PreconditionSSOR         preconditioner;
-  preconditioner.initialize(
-    jacobian_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
+  preconditioner.initialize(jacobian_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
 
   solver.solve(jacobian_matrix, delta_owned, residual_vector, preconditioner);
-  pcout << "   " << solver_control.last_step() << " GMRES iterations"
-        << std::endl;
+  pcout << "   " << solver_control.last_step() << " GMRES iterations" << std::endl;
 }
 
-void
-NonLinearDiffusion::solve_newton()
+void NonLinearDiffusion::solve_newton()
 {
   pcout << "===============================================" << std::endl;
 
@@ -241,9 +212,8 @@ NonLinearDiffusion::solve_newton()
       assemble_system();
       residual_norm = residual_vector.l2_norm();
 
-      pcout << "Newton iteration " << n_iter << "/" << n_max_iters
-            << " - ||r|| = " << std::scientific << std::setprecision(6)
-            << residual_norm << std::flush;
+      pcout << "Newton iteration " << n_iter << "/" << n_max_iters << " - ||r|| = " << std::scientific << std::setprecision(6) << residual_norm
+            << std::flush;
 
       // We actually solve the system only if the residual is larger than the
       // tolerance.
@@ -265,8 +235,7 @@ NonLinearDiffusion::solve_newton()
   pcout << "===============================================" << std::endl;
 }
 
-void
-NonLinearDiffusion::output() const
+void NonLinearDiffusion::output() const
 {
   DataOut<dim> data_out;
   data_out.add_data_vector(dof_handler, solution, "u");
@@ -279,10 +248,7 @@ NonLinearDiffusion::output() const
   data_out.build_patches();
 
   const std::string output_file_name = "output-nonlineardiffusion";
-  data_out.write_vtu_with_pvtu_record("./",
-                                      output_file_name,
-                                      0,
-                                      MPI_COMM_WORLD);
+  data_out.write_vtu_with_pvtu_record("./", output_file_name, 0, MPI_COMM_WORLD);
 
   pcout << "Output written to " << output_file_name << "." << std::endl;
 

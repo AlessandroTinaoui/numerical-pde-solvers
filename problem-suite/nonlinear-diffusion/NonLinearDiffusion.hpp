@@ -46,25 +46,20 @@ public:
   {}
 
   // Initialization.
-  void
-  setup();
+  void setup();
 
   // Solve the problem using Newton's method.
-  void
-  solve_newton();
+  void solve_newton();
 
   // Output.
-  void
-  output() const;
+  void output() const;
 
 protected:
   // Assemble the tangent problem.
-  void
-  assemble_system();
+  void assemble_system();
 
   // Solve the tangent problem.
-  void
-  solve_system();
+  void solve_system();
 
   // MPI parallel. /////////////////////////////////////////////////////////////
 

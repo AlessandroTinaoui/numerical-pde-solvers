@@ -1,7 +1,6 @@
 #include "LinearElasticity.hpp"
 
-void
-LinearElasticity::setup()
+void LinearElasticity::setup()
 {
   // Create the mesh.
   {
@@ -22,15 +21,13 @@ LinearElasticity::setup()
     // Then, we copy the triangulation into the parallel one.
     {
       GridTools::partition_triangulation(mpi_size, mesh_serial);
-      const auto construction_data = TriangulationDescription::Utilities::
-        create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
+      const auto construction_data = TriangulationDescription::Utilities::create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
       mesh.create_triangulation(construction_data);
     }
 
     // Notice that we write here the number of *global* active cells (across all
     // processes).
-    pcout << "  Number of elements = " << mesh.n_global_active_cells()
-          << std::endl;
+    pcout << "  Number of elements = " << mesh.n_global_active_cells() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -45,13 +42,11 @@ LinearElasticity::setup()
     fe = std::make_unique<FESystem<dim>>(fe_scalar, dim);
 
     pcout << "  Degree                     = " << fe->degree << std::endl;
-    pcout << "  DoFs per cell              = " << fe->dofs_per_cell
-          << std::endl;
+    pcout << "  DoFs per cell              = " << fe->dofs_per_cell << std::endl;
 
     quadrature = std::make_unique<QGaussSimplex<dim>>(r + 1);
 
-    pcout << "  Quadrature points per cell = " << quadrature->size()
-          << std::endl;
+    pcout << "  Quadrature points per cell = " << quadrature->size() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -65,9 +60,8 @@ LinearElasticity::setup()
 
     // We retrieve the set of locally owned DoFs, which will be useful when
     // initializing linear algebra classes.
-    locally_owned_dofs = dof_handler.locally_owned_dofs();
-    locally_relevant_dofs =
-      DoFTools::extract_locally_relevant_dofs(dof_handler);
+    locally_owned_dofs    = dof_handler.locally_owned_dofs();
+    locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
 
     pcout << "  Number of DoFs = " << dof_handler.n_dofs() << std::endl;
   }
@@ -82,8 +76,7 @@ LinearElasticity::setup()
 
     // To initialize the sparsity pattern, we use Trilinos' class, that manages
     // some of the inter-process communication.
-    TrilinosWrappers::SparsityPattern sparsity(locally_owned_dofs,
-                                               MPI_COMM_WORLD);
+    TrilinosWrappers::SparsityPattern sparsity(locally_owned_dofs, MPI_COMM_WORLD);
     DoFTools::make_sparsity_pattern(dof_handler, sparsity);
 
     // After initialization, we need to call compress, so that all process
@@ -105,8 +98,7 @@ LinearElasticity::setup()
   }
 }
 
-void
-LinearElasticity::assemble_system()
+void LinearElasticity::assemble_system()
 {
   pcout << "===============================================" << std::endl;
   pcout << "Assembling the system" << std::endl;
@@ -114,10 +106,7 @@ LinearElasticity::assemble_system()
   const unsigned int dofs_per_cell = fe->dofs_per_cell;
   const unsigned int n_q           = quadrature->size();
 
-  FEValues<dim> fe_values(*fe,
-                          *quadrature,
-                          update_values | update_gradients |
-                            update_quadrature_points | update_JxW_values);
+  FEValues<dim> fe_values(*fe, *quadrature, update_values | update_gradients | update_quadrature_points | update_JxW_values);
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   Vector<double>     cell_rhs(dofs_per_cell);
@@ -148,18 +137,12 @@ LinearElasticity::assemble_system()
             {
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
-                  cell_matrix(i, j) +=
-                    (mu *
-                       scalar_product(fe_values[displacement].gradient(j, q),
-                                      fe_values[displacement].gradient(i, q)) +
-                     lambda * fe_values[displacement].divergence(j, q) *
-                       fe_values[displacement].divergence(i, q)) *
-                    fe_values.JxW(q);
+                  cell_matrix(i, j) += (mu * scalar_product(fe_values[displacement].gradient(j, q), fe_values[displacement].gradient(i, q)) +
+                                        lambda * fe_values[displacement].divergence(j, q) * fe_values[displacement].divergence(i, q)) *
+                                       fe_values.JxW(q);
                 }
 
-              cell_rhs(i) +=
-                scalar_product(f, fe_values[displacement].value(i, q)) *
-                fe_values.JxW(q);
+              cell_rhs(i) += scalar_product(f, fe_values[displacement].value(i, q)) * fe_values.JxW(q);
             }
         }
 
@@ -181,17 +164,13 @@ LinearElasticity::assemble_system()
     boundary_functions[0] = &function_g;
     boundary_functions[1] = &function_g;
 
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values);
+    VectorTools::interpolate_boundary_values(dof_handler, boundary_functions, boundary_values);
 
-    MatrixTools::apply_boundary_values(
-      boundary_values, system_matrix, solution_owned, system_rhs, true);
+    MatrixTools::apply_boundary_values(boundary_values, system_matrix, solution_owned, system_rhs, true);
   }
 }
 
-void
-LinearElasticity::solve_system()
+void LinearElasticity::solve_system()
 {
   pcout << "===============================================" << std::endl;
   pcout << "Solving the system" << std::endl;
@@ -200,8 +179,7 @@ LinearElasticity::solve_system()
 
   SolverCG<TrilinosWrappers::MPI::Vector> solver(solver_control);
   TrilinosWrappers::PreconditionSSOR      preconditioner;
-  preconditioner.initialize(
-    system_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
+  preconditioner.initialize(system_matrix, TrilinosWrappers::PreconditionSSOR::AdditionalData(1.0));
 
   solver.solve(system_matrix, solution_owned, system_rhs, preconditioner);
   pcout << "  " << solver_control.last_step() << " CG iterations" << std::endl;
@@ -209,8 +187,7 @@ LinearElasticity::solve_system()
   solution = solution_owned;
 }
 
-void
-LinearElasticity::output() const
+void LinearElasticity::output() const
 {
   pcout << "===============================================" << std::endl;
 
@@ -219,15 +196,11 @@ LinearElasticity::output() const
   // By passing these two additional arguments to add_data_vector, we specify
   // that the three components of the solution are actually the three components
   // of a vector, so that the visualization program can take that into account.
-  std::vector<DataComponentInterpretation::DataComponentInterpretation>
-    data_component_interpretation(
-      dim, DataComponentInterpretation::component_is_part_of_vector);
+  std::vector<DataComponentInterpretation::DataComponentInterpretation> data_component_interpretation(
+    dim, DataComponentInterpretation::component_is_part_of_vector);
   std::vector<std::string> solution_names(dim, "u");
 
-  data_out.add_data_vector(dof_handler,
-                           solution,
-                           solution_names,
-                           data_component_interpretation);
+  data_out.add_data_vector(dof_handler, solution, solution_names, data_component_interpretation);
 
   std::vector<unsigned int> partition_int(mesh.n_active_cells());
   GridTools::get_subdomain_association(mesh, partition_int);
@@ -237,10 +210,7 @@ LinearElasticity::output() const
   data_out.build_patches();
 
   const std::string output_file_name = "output-linearelasticity";
-  data_out.write_vtu_with_pvtu_record("./",
-                                      output_file_name,
-                                      0,
-                                      MPI_COMM_WORLD);
+  data_out.write_vtu_with_pvtu_record("./", output_file_name, 0, MPI_COMM_WORLD);
 
   pcout << "Output written to " << output_file_name << "." << std::endl;
 

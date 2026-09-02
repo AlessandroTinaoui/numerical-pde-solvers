@@ -4,8 +4,7 @@
 #include <iomanip>
 
 template <unsigned int dim>
-void
-TransientStokes<dim>::setup()
+void TransientStokes<dim>::setup()
 {
   // Create the mesh.
   {
@@ -20,12 +19,10 @@ TransientStokes<dim>::setup()
     grid_in.read_msh(grid_in_file);
 
     GridTools::partition_triangulation(mpi_size, mesh_serial);
-    const auto construction_data = TriangulationDescription::Utilities::
-      create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
+    const auto construction_data = TriangulationDescription::Utilities::create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
     mesh.create_triangulation(construction_data);
 
-    pcout << "  Number of elements = " << mesh.n_global_active_cells()
-          << std::endl;
+    pcout << "  Number of elements = " << mesh.n_global_active_cells() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -36,27 +33,19 @@ TransientStokes<dim>::setup()
 
     const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
     const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
-    fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity,
-                                         dim,
-                                         fe_scalar_pressure,
-                                         1);
+    fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity, dim, fe_scalar_pressure, 1);
 
-    pcout << "  Velocity degree:           = " << fe_scalar_velocity.degree
-          << std::endl;
-    pcout << "  Pressure degree:           = " << fe_scalar_pressure.degree
-          << std::endl;
-    pcout << "  DoFs per cell              = " << fe->dofs_per_cell
-          << std::endl;
+    pcout << "  Velocity degree:           = " << fe_scalar_velocity.degree << std::endl;
+    pcout << "  Pressure degree:           = " << fe_scalar_pressure.degree << std::endl;
+    pcout << "  DoFs per cell              = " << fe->dofs_per_cell << std::endl;
 
     quadrature = std::make_unique<QGaussSimplex<dim>>(fe->degree + 1);
 
-    pcout << "  Quadrature points per cell = " << quadrature->size()
-          << std::endl;
+    pcout << "  Quadrature points per cell = " << quadrature->size() << std::endl;
 
     quadrature_face = std::make_unique<QGaussSimplex<dim - 1>>(fe->degree + 1);
 
-    pcout << "  Quadrature points per face = " << quadrature_face->size()
-          << std::endl;
+    pcout << "  Quadrature points per face = " << quadrature_face->size() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -74,18 +63,16 @@ TransientStokes<dim>::setup()
     block_component[dim] = 1;
     DoFRenumbering::component_wise(dof_handler, block_component);
 
-    locally_owned_dofs = dof_handler.locally_owned_dofs();
-    locally_relevant_dofs =
-      DoFTools::extract_locally_relevant_dofs(dof_handler);
+    locally_owned_dofs    = dof_handler.locally_owned_dofs();
+    locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
 
     // Besides the locally owned and locally relevant indices for the whole
     // system (velocity and pressure), we will also need those for the
     // individual velocity and pressure blocks.
-    std::vector<types::global_dof_index> dofs_per_block =
-      DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
-    const unsigned int n_u = dofs_per_block[0];
-    const unsigned int n_p = dofs_per_block[1];
-    n_velocity_dofs         = n_u;
+    std::vector<types::global_dof_index> dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
+    const unsigned int                   n_u            = dofs_per_block[0];
+    const unsigned int                   n_p            = dofs_per_block[1];
+    n_velocity_dofs                                     = n_u;
 
     block_owned_dofs.resize(2);
     block_relevant_dofs.resize(2);
@@ -126,8 +113,7 @@ TransientStokes<dim>::setup()
           }
       }
 
-    TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
-                                                    MPI_COMM_WORLD);
+    TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs, MPI_COMM_WORLD);
     DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
     sparsity.compress();
 
@@ -142,11 +128,8 @@ TransientStokes<dim>::setup()
               coupling[c][d] = DoFTools::none;
           }
       }
-    TrilinosWrappers::BlockSparsityPattern sparsity_pressure_mass(
-      block_owned_dofs, MPI_COMM_WORLD);
-    DoFTools::make_sparsity_pattern(dof_handler,
-                                    coupling,
-                                    sparsity_pressure_mass);
+    TrilinosWrappers::BlockSparsityPattern sparsity_pressure_mass(block_owned_dofs, MPI_COMM_WORLD);
+    DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity_pressure_mass);
     sparsity_pressure_mass.compress();
 
     pcout << "  Initializing the matrices" << std::endl;
@@ -158,15 +141,12 @@ TransientStokes<dim>::setup()
     pcout << "  Initializing the solution vector" << std::endl;
     solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
     solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
-    old_solution.reinit(block_owned_dofs,
-                        block_relevant_dofs,
-                        MPI_COMM_WORLD);
+    old_solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
   }
 }
 
 template <unsigned int dim>
-void
-TransientStokes<dim>::assemble()
+void TransientStokes<dim>::assemble()
 {
   pcout << "===============================================" << std::endl;
   pcout << "Assembling the system" << std::endl;
@@ -175,15 +155,8 @@ TransientStokes<dim>::assemble()
   const unsigned int n_q           = quadrature->size();
   const unsigned int n_q_face      = quadrature_face->size();
 
-  FEValues<dim>     fe_values(*fe,
-                          *quadrature,
-                          update_values | update_gradients |
-                            update_quadrature_points | update_JxW_values);
-  FEFaceValues<dim> fe_face_values(*fe,
-                                   *quadrature_face,
-                                   update_values | update_normal_vectors |
-                                     update_quadrature_points |
-                                     update_JxW_values);
+  FEValues<dim>     fe_values(*fe, *quadrature, update_values | update_gradients | update_quadrature_points | update_JxW_values);
+  FEFaceValues<dim> fe_face_values(*fe, *quadrature_face, update_values | update_normal_vectors | update_quadrature_points | update_JxW_values);
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   FullMatrix<double> cell_pressure_mass_matrix(dofs_per_cell, dofs_per_cell);
@@ -208,8 +181,7 @@ TransientStokes<dim>::assemble()
 
       fe_values.reinit(cell);
       fe_values[velocity].get_function_values(old_solution, old_velocity);
-      fe_values[velocity].get_function_gradients(old_solution,
-                                                 old_velocity_gradient);
+      fe_values[velocity].get_function_gradients(old_solution, old_velocity_gradient);
 
       cell_matrix               = 0.0;
       cell_rhs                  = 0.0;
@@ -217,17 +189,12 @@ TransientStokes<dim>::assemble()
 
       for (unsigned int q = 0; q < n_q; ++q)
         {
-          const double mu_loc = mu(fe_values.quadrature_point(q));
-          const double alpha_loc =
-            alpha(fe_values.quadrature_point(q));
-          const Tensor<1, dim> forcing_loc =
-            forcing(fe_values.quadrature_point(q), time);
-          const Tensor<1, dim> forcing_old_loc =
-            forcing(fe_values.quadrature_point(q),
-                    time - current_delta_t);
+          const double         mu_loc          = mu(fe_values.quadrature_point(q));
+          const double         alpha_loc       = alpha(fe_values.quadrature_point(q));
+          const Tensor<1, dim> forcing_loc     = forcing(fe_values.quadrature_point(q), time);
+          const Tensor<1, dim> forcing_old_loc = forcing(fe_values.quadrature_point(q), time - current_delta_t);
 
-          AssertThrow(mu_loc > 0.0,
-                      ExcMessage("The viscosity coefficient must be positive."));
+          AssertThrow(mu_loc > 0.0, ExcMessage("The viscosity coefficient must be positive."));
 
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
@@ -235,50 +202,28 @@ TransientStokes<dim>::assemble()
                 {
                   // Viscosity term.
                   cell_matrix(i, j) +=
-                    theta * mu_loc *
-                    scalar_product(fe_values[velocity].gradient(i, q),
-                                   fe_values[velocity].gradient(j, q)) *
-                    fe_values.JxW(q);
+                    theta * mu_loc * scalar_product(fe_values[velocity].gradient(i, q), fe_values[velocity].gradient(j, q)) * fe_values.JxW(q);
 
                   // Generalized-Stokes reaction term.
-                  cell_matrix(i, j) +=
-                    (theta * alpha_loc + 1.0 / current_delta_t) *
-                    scalar_product(fe_values[velocity].value(i, q),
-                                   fe_values[velocity].value(j, q)) *
-                    fe_values.JxW(q);
+                  cell_matrix(i, j) += (theta * alpha_loc + 1.0 / current_delta_t) *
+                                       scalar_product(fe_values[velocity].value(i, q), fe_values[velocity].value(j, q)) * fe_values.JxW(q);
 
                   // Pressure term in the momentum equation.
-                  cell_matrix(i, j) -= fe_values[velocity].divergence(i, q) *
-                                       fe_values[pressure].value(j, q) *
-                                       fe_values.JxW(q);
+                  cell_matrix(i, j) -= fe_values[velocity].divergence(i, q) * fe_values[pressure].value(j, q) * fe_values.JxW(q);
 
                   // Pressure term in the continuity equation.
-                  cell_matrix(i, j) -= fe_values[velocity].divergence(j, q) *
-                                       fe_values[pressure].value(i, q) *
-                                       fe_values.JxW(q);
+                  cell_matrix(i, j) -= fe_values[velocity].divergence(j, q) * fe_values[pressure].value(i, q) * fe_values.JxW(q);
 
                   // Pressure mass matrix.
-                  cell_pressure_mass_matrix(i, j) +=
-                    fe_values[pressure].value(i, q) *
-                    fe_values[pressure].value(j, q) / mu_loc *
-                    fe_values.JxW(q);
+                  cell_pressure_mass_matrix(i, j) += fe_values[pressure].value(i, q) * fe_values[pressure].value(j, q) / mu_loc * fe_values.JxW(q);
                 }
 
               // Volumetric forcing term.
-              const Tensor<1, dim> effective_forcing =
-                theta * forcing_loc + (1.0 - theta) * forcing_old_loc +
-                old_velocity[q] / current_delta_t;
-              cell_rhs(i) +=
-                (scalar_product(effective_forcing,
-                                fe_values[velocity].value(i, q)) -
-                 (1.0 - theta) *
-                   (mu_loc *
-                      scalar_product(old_velocity_gradient[q],
-                                     fe_values[velocity].gradient(i, q)) +
-                    alpha_loc *
-                      scalar_product(old_velocity[q],
-                                     fe_values[velocity].value(i, q)))) *
-                fe_values.JxW(q);
+              const Tensor<1, dim> effective_forcing = theta * forcing_loc + (1.0 - theta) * forcing_old_loc + old_velocity[q] / current_delta_t;
+              cell_rhs(i) += (scalar_product(effective_forcing, fe_values[velocity].value(i, q)) -
+                              (1.0 - theta) * (mu_loc * scalar_product(old_velocity_gradient[q], fe_values[velocity].gradient(i, q)) +
+                                               alpha_loc * scalar_product(old_velocity[q], fe_values[velocity].value(i, q)))) *
+                             fe_values.JxW(q);
             }
         }
 
@@ -290,8 +235,7 @@ TransientStokes<dim>::assemble()
               if (!cell->face(f)->at_boundary())
                 continue;
 
-              const auto condition =
-                traction_conditions.find(cell->face(f)->boundary_id());
+              const auto condition = traction_conditions.find(cell->face(f)->boundary_id());
 
               if (condition != traction_conditions.end())
                 {
@@ -301,22 +245,12 @@ TransientStokes<dim>::assemble()
                     {
                       for (unsigned int i = 0; i < dofs_per_cell; ++i)
                         {
-                          const Point<dim> &point =
-                            fe_face_values.quadrature_point(q);
-                          const Tensor<1, dim> &normal =
-                            fe_face_values.normal_vector(q);
-                          const Tensor<1, dim> traction =
-                            theta * condition->second(point, normal, time) +
-                            (1.0 - theta) *
-                              condition->second(point,
-                                                normal,
-                                                time - current_delta_t);
+                          const Point<dim>     &point  = fe_face_values.quadrature_point(q);
+                          const Tensor<1, dim> &normal = fe_face_values.normal_vector(q);
+                          const Tensor<1, dim>  traction =
+                            theta * condition->second(point, normal, time) + (1.0 - theta) * condition->second(point, normal, time - current_delta_t);
 
-                          cell_rhs(i) +=
-                            scalar_product(traction,
-                                           fe_face_values[velocity].value(i,
-                                                                          q)) *
-                            fe_face_values.JxW(q);
+                          cell_rhs(i) += scalar_product(traction, fe_face_values[velocity].value(i, q)) * fe_face_values.JxW(q);
                         }
                     }
                 }
@@ -337,32 +271,25 @@ TransientStokes<dim>::assemble()
   // Dirichlet boundary conditions.
   {
     std::map<types::global_dof_index, double> boundary_values;
-    ComponentMask mask_velocity(dim + 1, true);
+    ComponentMask                             mask_velocity(dim + 1, true);
     mask_velocity.set(dim, false);
 
     for (const auto &[boundary_id, function] : dirichlet_conditions)
       {
-        const VectorFunctionWrapper wrapper(function, time);
-        const std::map<types::boundary_id, const Function<dim> *> condition = {
-          {boundary_id, &wrapper}};
-        VectorTools::interpolate_boundary_values(dof_handler,
-                                                 condition,
-                                                 boundary_values,
-                                                 mask_velocity);
+        const VectorFunctionWrapper                               wrapper(function, time);
+        const std::map<types::boundary_id, const Function<dim> *> condition = {{boundary_id, &wrapper}};
+        VectorTools::interpolate_boundary_values(dof_handler, condition, boundary_values, mask_velocity);
       }
 
-    if (fix_pressure_nullspace &&
-        locally_relevant_dofs.is_element(n_velocity_dofs))
+    if (fix_pressure_nullspace && locally_relevant_dofs.is_element(n_velocity_dofs))
       boundary_values[n_velocity_dofs] = 0.0;
 
-    MatrixTools::apply_boundary_values(
-      boundary_values, system_matrix, solution_owned, system_rhs, false);
+    MatrixTools::apply_boundary_values(boundary_values, system_matrix, solution_owned, system_rhs, false);
   }
 }
 
 template <unsigned int dim>
-void
-TransientStokes<dim>::solve()
+void TransientStokes<dim>::solve()
 {
   pcout << "===============================================" << std::endl;
 
@@ -375,29 +302,23 @@ TransientStokes<dim>::solve()
   //                           pressure_mass.block(1, 1));
 
   PreconditionBlockTriangular preconditioner;
-  preconditioner.initialize(system_matrix.block(0, 0),
-                            pressure_mass.block(1, 1),
-                            system_matrix.block(1, 0));
+  preconditioner.initialize(system_matrix.block(0, 0), pressure_mass.block(1, 1), system_matrix.block(1, 0));
 
   pcout << "Solving the linear system" << std::endl;
   solver.solve(system_matrix, solution_owned, system_rhs, preconditioner);
-  pcout << "  " << solver_control.last_step() << " GMRES iterations"
-        << std::endl;
+  pcout << "  " << solver_control.last_step() << " GMRES iterations" << std::endl;
 
   solution = solution_owned;
 }
 
 template <unsigned int dim>
-void
-TransientStokes<dim>::output()
+void TransientStokes<dim>::output()
 {
   pcout << "===============================================" << std::endl;
 
   DataOut<dim> data_out;
 
-  std::vector<DataComponentInterpretation::DataComponentInterpretation>
-    interpretation(dim,
-                   DataComponentInterpretation::component_is_part_of_vector);
+  std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(dim, DataComponentInterpretation::component_is_part_of_vector);
   interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
   std::vector<std::string> names(dim, "velocity");
@@ -413,11 +334,7 @@ TransientStokes<dim>::output()
   data_out.build_patches();
 
   const std::string output_file_name = "output-transient-stokes";
-  const std::string pvtu_file_name =
-    data_out.write_vtu_with_pvtu_record("./",
-                                        output_file_name,
-                                        timestep_number,
-                                        MPI_COMM_WORLD);
+  const std::string pvtu_file_name   = data_out.write_vtu_with_pvtu_record("./", output_file_name, timestep_number, MPI_COMM_WORLD);
 
   if (mpi_rank == 0)
     {
@@ -431,13 +348,11 @@ TransientStokes<dim>::output()
 }
 
 template <unsigned int dim>
-void
-TransientStokes<dim>::run()
+void TransientStokes<dim>::run()
 {
   AssertThrow(final_time > 0.0, ExcMessage("Final time must be positive."));
   AssertThrow(delta_t > 0.0, ExcMessage("Time step must be positive."));
-  AssertThrow(theta >= 0.0 && theta <= 1.0,
-              ExcMessage("Theta must be between zero and one."));
+  AssertThrow(theta >= 0.0 && theta <= 1.0, ExcMessage("Theta must be between zero and one."));
 
   setup();
   times_and_names.clear();
@@ -457,9 +372,7 @@ TransientStokes<dim>::run()
       time += current_delta_t;
       ++timestep_number;
 
-      pcout << "Timestep " << std::setw(3) << timestep_number
-            << ", time = " << std::fixed << std::setprecision(2) << time
-            << std::endl;
+      pcout << "Timestep " << std::setw(3) << timestep_number << ", time = " << std::fixed << std::setprecision(2) << time << std::endl;
 
       assemble();
       solve();

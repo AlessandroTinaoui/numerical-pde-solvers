@@ -1,8 +1,7 @@
 #include "SteadyStokes.hpp"
 
 template <unsigned int dim>
-void
-SteadyStokes<dim>::setup()
+void SteadyStokes<dim>::setup()
 {
   // Create the mesh.
   {
@@ -17,12 +16,10 @@ SteadyStokes<dim>::setup()
     grid_in.read_msh(grid_in_file);
 
     GridTools::partition_triangulation(mpi_size, mesh_serial);
-    const auto construction_data = TriangulationDescription::Utilities::
-      create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
+    const auto construction_data = TriangulationDescription::Utilities::create_description_from_triangulation(mesh_serial, MPI_COMM_WORLD);
     mesh.create_triangulation(construction_data);
 
-    pcout << "  Number of elements = " << mesh.n_global_active_cells()
-          << std::endl;
+    pcout << "  Number of elements = " << mesh.n_global_active_cells() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -33,27 +30,19 @@ SteadyStokes<dim>::setup()
 
     const FE_SimplexP<dim> fe_scalar_velocity(degree_velocity);
     const FE_SimplexP<dim> fe_scalar_pressure(degree_pressure);
-    fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity,
-                                         dim,
-                                         fe_scalar_pressure,
-                                         1);
+    fe = std::make_unique<FESystem<dim>>(fe_scalar_velocity, dim, fe_scalar_pressure, 1);
 
-    pcout << "  Velocity degree:           = " << fe_scalar_velocity.degree
-          << std::endl;
-    pcout << "  Pressure degree:           = " << fe_scalar_pressure.degree
-          << std::endl;
-    pcout << "  DoFs per cell              = " << fe->dofs_per_cell
-          << std::endl;
+    pcout << "  Velocity degree:           = " << fe_scalar_velocity.degree << std::endl;
+    pcout << "  Pressure degree:           = " << fe_scalar_pressure.degree << std::endl;
+    pcout << "  DoFs per cell              = " << fe->dofs_per_cell << std::endl;
 
     quadrature = std::make_unique<QGaussSimplex<dim>>(fe->degree + 1);
 
-    pcout << "  Quadrature points per cell = " << quadrature->size()
-          << std::endl;
+    pcout << "  Quadrature points per cell = " << quadrature->size() << std::endl;
 
     quadrature_face = std::make_unique<QGaussSimplex<dim - 1>>(fe->degree + 1);
 
-    pcout << "  Quadrature points per face = " << quadrature_face->size()
-          << std::endl;
+    pcout << "  Quadrature points per face = " << quadrature_face->size() << std::endl;
   }
 
   pcout << "-----------------------------------------------" << std::endl;
@@ -71,18 +60,16 @@ SteadyStokes<dim>::setup()
     block_component[dim] = 1;
     DoFRenumbering::component_wise(dof_handler, block_component);
 
-    locally_owned_dofs = dof_handler.locally_owned_dofs();
-    locally_relevant_dofs =
-      DoFTools::extract_locally_relevant_dofs(dof_handler);
+    locally_owned_dofs    = dof_handler.locally_owned_dofs();
+    locally_relevant_dofs = DoFTools::extract_locally_relevant_dofs(dof_handler);
 
     // Besides the locally owned and locally relevant indices for the whole
     // system (velocity and pressure), we will also need those for the
     // individual velocity and pressure blocks.
-    std::vector<types::global_dof_index> dofs_per_block =
-      DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
-    const unsigned int n_u = dofs_per_block[0];
-    const unsigned int n_p = dofs_per_block[1];
-    n_velocity_dofs         = n_u;
+    std::vector<types::global_dof_index> dofs_per_block = DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
+    const unsigned int                   n_u            = dofs_per_block[0];
+    const unsigned int                   n_p            = dofs_per_block[1];
+    n_velocity_dofs                                     = n_u;
 
     block_owned_dofs.resize(2);
     block_relevant_dofs.resize(2);
@@ -123,8 +110,7 @@ SteadyStokes<dim>::setup()
           }
       }
 
-    TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs,
-                                                    MPI_COMM_WORLD);
+    TrilinosWrappers::BlockSparsityPattern sparsity(block_owned_dofs, MPI_COMM_WORLD);
     DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity);
     sparsity.compress();
 
@@ -139,11 +125,8 @@ SteadyStokes<dim>::setup()
               coupling[c][d] = DoFTools::none;
           }
       }
-    TrilinosWrappers::BlockSparsityPattern sparsity_pressure_mass(
-      block_owned_dofs, MPI_COMM_WORLD);
-    DoFTools::make_sparsity_pattern(dof_handler,
-                                    coupling,
-                                    sparsity_pressure_mass);
+    TrilinosWrappers::BlockSparsityPattern sparsity_pressure_mass(block_owned_dofs, MPI_COMM_WORLD);
+    DoFTools::make_sparsity_pattern(dof_handler, coupling, sparsity_pressure_mass);
     sparsity_pressure_mass.compress();
 
     pcout << "  Initializing the matrices" << std::endl;
@@ -159,8 +142,7 @@ SteadyStokes<dim>::setup()
 }
 
 template <unsigned int dim>
-void
-SteadyStokes<dim>::assemble()
+void SteadyStokes<dim>::assemble()
 {
   pcout << "===============================================" << std::endl;
   pcout << "Assembling the system" << std::endl;
@@ -169,15 +151,8 @@ SteadyStokes<dim>::assemble()
   const unsigned int n_q           = quadrature->size();
   const unsigned int n_q_face      = quadrature_face->size();
 
-  FEValues<dim>     fe_values(*fe,
-                          *quadrature,
-                          update_values | update_gradients |
-                            update_quadrature_points | update_JxW_values);
-  FEFaceValues<dim> fe_face_values(*fe,
-                                   *quadrature_face,
-                                   update_values | update_normal_vectors |
-                                     update_quadrature_points |
-                                     update_JxW_values);
+  FEValues<dim>     fe_values(*fe, *quadrature, update_values | update_gradients | update_quadrature_points | update_JxW_values);
+  FEFaceValues<dim> fe_face_values(*fe, *quadrature_face, update_values | update_normal_vectors | update_quadrature_points | update_JxW_values);
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
   FullMatrix<double> cell_pressure_mass_matrix(dofs_per_cell, dofs_per_cell);
@@ -205,14 +180,11 @@ SteadyStokes<dim>::assemble()
 
       for (unsigned int q = 0; q < n_q; ++q)
         {
-          const double mu_loc = mu(fe_values.quadrature_point(q));
-          const double alpha_loc =
-            alpha(fe_values.quadrature_point(q));
-          const Tensor<1, dim> forcing_loc =
-            forcing(fe_values.quadrature_point(q));
+          const double         mu_loc      = mu(fe_values.quadrature_point(q));
+          const double         alpha_loc   = alpha(fe_values.quadrature_point(q));
+          const Tensor<1, dim> forcing_loc = forcing(fe_values.quadrature_point(q));
 
-          AssertThrow(mu_loc > 0.0,
-                      ExcMessage("The viscosity coefficient must be positive."));
+          AssertThrow(mu_loc > 0.0, ExcMessage("The viscosity coefficient must be positive."));
 
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
@@ -220,40 +192,24 @@ SteadyStokes<dim>::assemble()
                 {
                   // Viscosity term.
                   cell_matrix(i, j) +=
-                    mu_loc *
-                    scalar_product(fe_values[velocity].gradient(i, q),
-                                   fe_values[velocity].gradient(j, q)) *
-                    fe_values.JxW(q);
+                    mu_loc * scalar_product(fe_values[velocity].gradient(i, q), fe_values[velocity].gradient(j, q)) * fe_values.JxW(q);
 
                   // Generalized-Stokes reaction term.
                   cell_matrix(i, j) +=
-                    alpha_loc *
-                    scalar_product(fe_values[velocity].value(i, q),
-                                   fe_values[velocity].value(j, q)) *
-                    fe_values.JxW(q);
+                    alpha_loc * scalar_product(fe_values[velocity].value(i, q), fe_values[velocity].value(j, q)) * fe_values.JxW(q);
 
                   // Pressure term in the momentum equation.
-                  cell_matrix(i, j) -= fe_values[velocity].divergence(i, q) *
-                                       fe_values[pressure].value(j, q) *
-                                       fe_values.JxW(q);
+                  cell_matrix(i, j) -= fe_values[velocity].divergence(i, q) * fe_values[pressure].value(j, q) * fe_values.JxW(q);
 
                   // Pressure term in the continuity equation.
-                  cell_matrix(i, j) -= fe_values[velocity].divergence(j, q) *
-                                       fe_values[pressure].value(i, q) *
-                                       fe_values.JxW(q);
+                  cell_matrix(i, j) -= fe_values[velocity].divergence(j, q) * fe_values[pressure].value(i, q) * fe_values.JxW(q);
 
                   // Pressure mass matrix.
-                  cell_pressure_mass_matrix(i, j) +=
-                    fe_values[pressure].value(i, q) *
-                    fe_values[pressure].value(j, q) / mu_loc *
-                    fe_values.JxW(q);
+                  cell_pressure_mass_matrix(i, j) += fe_values[pressure].value(i, q) * fe_values[pressure].value(j, q) / mu_loc * fe_values.JxW(q);
                 }
 
               // Volumetric forcing term.
-              cell_rhs(i) +=
-                scalar_product(forcing_loc,
-                               fe_values[velocity].value(i, q)) *
-                fe_values.JxW(q);
+              cell_rhs(i) += scalar_product(forcing_loc, fe_values[velocity].value(i, q)) * fe_values.JxW(q);
             }
         }
 
@@ -265,8 +221,7 @@ SteadyStokes<dim>::assemble()
               if (!cell->face(f)->at_boundary())
                 continue;
 
-              const auto condition =
-                traction_conditions.find(cell->face(f)->boundary_id());
+              const auto condition = traction_conditions.find(cell->face(f)->boundary_id());
 
               if (condition != traction_conditions.end())
                 {
@@ -276,15 +231,9 @@ SteadyStokes<dim>::assemble()
                     {
                       for (unsigned int i = 0; i < dofs_per_cell; ++i)
                         {
-                          const Tensor<1, dim> traction = condition->second(
-                            fe_face_values.quadrature_point(q),
-                            fe_face_values.normal_vector(q));
+                          const Tensor<1, dim> traction = condition->second(fe_face_values.quadrature_point(q), fe_face_values.normal_vector(q));
 
-                          cell_rhs(i) +=
-                            scalar_product(traction,
-                                           fe_face_values[velocity].value(i,
-                                                                          q)) *
-                            fe_face_values.JxW(q);
+                          cell_rhs(i) += scalar_product(traction, fe_face_values[velocity].value(i, q)) * fe_face_values.JxW(q);
                         }
                     }
                 }
@@ -305,30 +254,24 @@ SteadyStokes<dim>::assemble()
   // Dirichlet boundary conditions.
   {
     std::map<types::global_dof_index, double> boundary_values;
-    ComponentMask mask_velocity(dim + 1, true);
+    ComponentMask                             mask_velocity(dim + 1, true);
     mask_velocity.set(dim, false);
 
     for (const auto &[boundary_id, function] : dirichlet_conditions)
       {
         const DirichletConditions condition = {{boundary_id, function}};
-        VectorTools::interpolate_boundary_values(dof_handler,
-                                                 condition,
-                                                 boundary_values,
-                                                 mask_velocity);
+        VectorTools::interpolate_boundary_values(dof_handler, condition, boundary_values, mask_velocity);
       }
 
-    if (fix_pressure_nullspace &&
-        locally_relevant_dofs.is_element(n_velocity_dofs))
+    if (fix_pressure_nullspace && locally_relevant_dofs.is_element(n_velocity_dofs))
       boundary_values[n_velocity_dofs] = 0.0;
 
-    MatrixTools::apply_boundary_values(
-      boundary_values, system_matrix, solution_owned, system_rhs, false);
+    MatrixTools::apply_boundary_values(boundary_values, system_matrix, solution_owned, system_rhs, false);
   }
 }
 
 template <unsigned int dim>
-void
-SteadyStokes<dim>::solve()
+void SteadyStokes<dim>::solve()
 {
   pcout << "===============================================" << std::endl;
 
@@ -341,29 +284,23 @@ SteadyStokes<dim>::solve()
   //                           pressure_mass.block(1, 1));
 
   PreconditionBlockTriangular preconditioner;
-  preconditioner.initialize(system_matrix.block(0, 0),
-                            pressure_mass.block(1, 1),
-                            system_matrix.block(1, 0));
+  preconditioner.initialize(system_matrix.block(0, 0), pressure_mass.block(1, 1), system_matrix.block(1, 0));
 
   pcout << "Solving the linear system" << std::endl;
   solver.solve(system_matrix, solution_owned, system_rhs, preconditioner);
-  pcout << "  " << solver_control.last_step() << " GMRES iterations"
-        << std::endl;
+  pcout << "  " << solver_control.last_step() << " GMRES iterations" << std::endl;
 
   solution = solution_owned;
 }
 
 template <unsigned int dim>
-void
-SteadyStokes<dim>::output()
+void SteadyStokes<dim>::output()
 {
   pcout << "===============================================" << std::endl;
 
   DataOut<dim> data_out;
 
-  std::vector<DataComponentInterpretation::DataComponentInterpretation>
-    interpretation(dim,
-                   DataComponentInterpretation::component_is_part_of_vector);
+  std::vector<DataComponentInterpretation::DataComponentInterpretation> interpretation(dim, DataComponentInterpretation::component_is_part_of_vector);
   interpretation.push_back(DataComponentInterpretation::component_is_scalar);
 
   std::vector<std::string> names(dim, "velocity");
@@ -379,10 +316,7 @@ SteadyStokes<dim>::output()
   data_out.build_patches();
 
   const std::string output_file_name = "output-stokes";
-  data_out.write_vtu_with_pvtu_record("./",
-                                      output_file_name,
-                                      0,
-                                      MPI_COMM_WORLD);
+  data_out.write_vtu_with_pvtu_record("./", output_file_name, 0, MPI_COMM_WORLD);
 
   pcout << "Output written to " << output_file_name << std::endl;
   pcout << "===============================================" << std::endl;

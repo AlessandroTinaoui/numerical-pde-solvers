@@ -7,30 +7,23 @@ enum class RelaxedData
 };
 
 // Main function.
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
   Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv);
 
-  const std::string mesh_file_0 = "../mesh/mesh-problem-0.msh";
-  const std::string mesh_file_1 = "../mesh/mesh-problem-1.msh";
-  const unsigned int degree = 1;
+  const std::string  mesh_file_0 = "../mesh/mesh-problem-0.msh";
+  const std::string  mesh_file_1 = "../mesh/mesh-problem-1.msh";
+  const unsigned int degree      = 1;
 
-  const auto alpha = [](const Point<DiffusionReactionDN::dim> &) {
-    return 1.0;
-  };
-  const auto gamma = [](const Point<DiffusionReactionDN::dim> &) {
-    return 1.0;
-  };
-  const auto f = [](const Point<DiffusionReactionDN::dim> &) {
-    return 1.0;
-  };
+  const auto alpha = [](const Point<DiffusionReactionDN::dim> &) { return 1.0; };
+  const auto gamma = [](const Point<DiffusionReactionDN::dim> &) { return 1.0; };
+  const auto f     = [](const Point<DiffusionReactionDN::dim> &) { return 1.0; };
 
   Functions::ZeroFunction<DiffusionReactionDN::dim> zero;
-  DiffusionReactionDN::DirichletConditions dirichlet_0;
-  DiffusionReactionDN::DirichletConditions dirichlet_1;
-  DiffusionReactionDN::NeumannConditions neumann_0;
-  DiffusionReactionDN::NeumannConditions neumann_1;
+  DiffusionReactionDN::DirichletConditions          dirichlet_0;
+  DiffusionReactionDN::DirichletConditions          dirichlet_1;
+  DiffusionReactionDN::NeumannConditions            neumann_0;
+  DiffusionReactionDN::NeumannConditions            neumann_1;
 
   dirichlet_0[0] = &zero;
   dirichlet_0[2] = &zero;
@@ -39,24 +32,8 @@ main(int argc, char *argv[])
   dirichlet_1[2] = &zero;
   dirichlet_1[3] = &zero;
 
-  DiffusionReactionDN problem_0(0,
-                                mesh_file_0,
-                                degree,
-                                1,
-                                alpha,
-                                gamma,
-                                f,
-                                dirichlet_0,
-                                neumann_0);
-  DiffusionReactionDN problem_1(1,
-                                mesh_file_1,
-                                degree,
-                                0,
-                                alpha,
-                                gamma,
-                                f,
-                                dirichlet_1,
-                                neumann_1);
+  DiffusionReactionDN problem_0(0, mesh_file_0, degree, 1, alpha, gamma, f, dirichlet_0, neumann_0);
+  DiffusionReactionDN problem_1(1, mesh_file_1, degree, 0, alpha, gamma, f, dirichlet_1, neumann_1);
 
   problem_0.setup();
   problem_1.setup();
@@ -73,8 +50,7 @@ main(int argc, char *argv[])
   const double      lambda       = 0.25;
   const RelaxedData relaxed_data = RelaxedData::dirichlet;
 
-  while (n_iter < n_max_iter &&
-         (n_iter < 2 || solution_increment_norm > tolerance_increment))
+  while (n_iter < n_max_iter && (n_iter < 2 || solution_increment_norm > tolerance_increment))
     {
       const Vector<double> previous_solution = problem_1.get_solution();
 
@@ -83,8 +59,7 @@ main(int argc, char *argv[])
       problem_0.solve();
 
       problem_1.assemble();
-      const double neumann_increment = problem_1.apply_interface_neumann(
-        problem_0, relaxed_data == RelaxedData::neumann ? lambda : 1.0);
+      const double neumann_increment = problem_1.apply_interface_neumann(problem_0, relaxed_data == RelaxedData::neumann ? lambda : 1.0);
       problem_1.solve();
 
       if (relaxed_data == RelaxedData::dirichlet)
@@ -99,9 +74,7 @@ main(int argc, char *argv[])
       else
         solution_increment_norm = neumann_increment;
 
-      std::cout << "iteration " << n_iter
-                << " - solution increment = " << solution_increment_norm
-                << std::endl;
+      std::cout << "iteration " << n_iter << " - solution increment = " << solution_increment_norm << std::endl;
 
       problem_0.output(n_iter);
       problem_1.output(n_iter);

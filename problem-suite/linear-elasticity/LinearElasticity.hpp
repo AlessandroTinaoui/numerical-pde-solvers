@@ -41,16 +41,14 @@ public:
   class FunctionG : public Function<dim>
   {
   public:
-    virtual void
-    vector_value(const Point<dim> &p, Vector<double> &values) const override
+    virtual void vector_value(const Point<dim> &p, Vector<double> &values) const override
     {
       values[0] = 0.25 * p[0];
       values[1] = 0.25 * p[0];
       values[2] = 0.0;
     }
 
-    virtual double
-    value(const Point<dim> &p, const unsigned int component = 0) const override
+    virtual double value(const Point<dim> &p, const unsigned int component = 0) const override
     {
       if (component == 0)
         return 0.1 * p[0];
@@ -76,20 +74,16 @@ public:
   }
 
   // Initialization.
-  void
-  setup();
+  void setup();
 
   // Assemble the tangent problem.
-  void
-  assemble_system();
+  void assemble_system();
 
   // Solve the tangent problem.
-  void
-  solve_system();
+  void solve_system();
 
   // Output.
-  void
-  output() const;
+  void output() const;
 
 protected:
   // MPI parallel. /////////////////////////////////////////////////////////////
