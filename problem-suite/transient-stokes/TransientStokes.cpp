@@ -1,7 +1,11 @@
-#include "Stokes.hpp"
+#include "TransientStokes.hpp"
 
+#include <algorithm>
+#include <iomanip>
+
+template <unsigned int dim>
 void
-Stokes::setup()
+TransientStokes<dim>::setup()
 {
   // Create the mesh.
   {
@@ -81,6 +85,7 @@ Stokes::setup()
       DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
     const unsigned int n_u = dofs_per_block[0];
     const unsigned int n_p = dofs_per_block[1];
+    n_velocity_dofs         = n_u;
 
     block_owned_dofs.resize(2);
     block_relevant_dofs.resize(2);
@@ -153,11 +158,15 @@ Stokes::setup()
     pcout << "  Initializing the solution vector" << std::endl;
     solution_owned.reinit(block_owned_dofs, MPI_COMM_WORLD);
     solution.reinit(block_owned_dofs, block_relevant_dofs, MPI_COMM_WORLD);
+    old_solution.reinit(block_owned_dofs,
+                        block_relevant_dofs,
+                        MPI_COMM_WORLD);
   }
 }
 
+template <unsigned int dim>
 void
-Stokes::assemble()
+TransientStokes<dim>::assemble()
 {
   pcout << "===============================================" << std::endl;
   pcout << "Assembling the system" << std::endl;
@@ -173,6 +182,7 @@ Stokes::assemble()
   FEFaceValues<dim> fe_face_values(*fe,
                                    *quadrature_face,
                                    update_values | update_normal_vectors |
+                                     update_quadrature_points |
                                      update_JxW_values);
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
@@ -188,12 +198,18 @@ Stokes::assemble()
   FEValuesExtractors::Vector velocity(0);
   FEValuesExtractors::Scalar pressure(dim);
 
+  std::vector<Tensor<1, dim>> old_velocity(n_q);
+  std::vector<Tensor<2, dim>> old_velocity_gradient(n_q);
+
   for (const auto &cell : dof_handler.active_cell_iterators())
     {
       if (!cell->is_locally_owned())
         continue;
 
       fe_values.reinit(cell);
+      fe_values[velocity].get_function_values(old_solution, old_velocity);
+      fe_values[velocity].get_function_gradients(old_solution,
+                                                 old_velocity_gradient);
 
       cell_matrix               = 0.0;
       cell_rhs                  = 0.0;
@@ -201,15 +217,34 @@ Stokes::assemble()
 
       for (unsigned int q = 0; q < n_q; ++q)
         {
+          const double mu_loc = mu(fe_values.quadrature_point(q));
+          const double alpha_loc =
+            alpha(fe_values.quadrature_point(q));
+          const Tensor<1, dim> forcing_loc =
+            forcing(fe_values.quadrature_point(q), time);
+          const Tensor<1, dim> forcing_old_loc =
+            forcing(fe_values.quadrature_point(q),
+                    time - current_delta_t);
+
+          AssertThrow(mu_loc > 0.0,
+                      ExcMessage("The viscosity coefficient must be positive."));
+
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
                   // Viscosity term.
                   cell_matrix(i, j) +=
-                    nu *
+                    theta * mu_loc *
                     scalar_product(fe_values[velocity].gradient(i, q),
                                    fe_values[velocity].gradient(j, q)) *
+                    fe_values.JxW(q);
+
+                  // Generalized-Stokes reaction term.
+                  cell_matrix(i, j) +=
+                    (theta * alpha_loc + 1.0 / current_delta_t) *
+                    scalar_product(fe_values[velocity].value(i, q),
+                                   fe_values[velocity].value(j, q)) *
                     fe_values.JxW(q);
 
                   // Pressure term in the momentum equation.
@@ -225,10 +260,25 @@ Stokes::assemble()
                   // Pressure mass matrix.
                   cell_pressure_mass_matrix(i, j) +=
                     fe_values[pressure].value(i, q) *
-                    fe_values[pressure].value(j, q) / nu * fe_values.JxW(q);
+                    fe_values[pressure].value(j, q) / mu_loc *
+                    fe_values.JxW(q);
                 }
 
-              // There is no forcing term.
+              // Volumetric forcing term.
+              const Tensor<1, dim> effective_forcing =
+                theta * forcing_loc + (1.0 - theta) * forcing_old_loc +
+                old_velocity[q] / current_delta_t;
+              cell_rhs(i) +=
+                (scalar_product(effective_forcing,
+                                fe_values[velocity].value(i, q)) -
+                 (1.0 - theta) *
+                   (mu_loc *
+                      scalar_product(old_velocity_gradient[q],
+                                     fe_values[velocity].gradient(i, q)) +
+                    alpha_loc *
+                      scalar_product(old_velocity[q],
+                                     fe_values[velocity].value(i, q)))) *
+                fe_values.JxW(q);
             }
         }
 
@@ -237,8 +287,13 @@ Stokes::assemble()
         {
           for (unsigned int f = 0; f < cell->n_faces(); ++f)
             {
-              if (cell->face(f)->at_boundary() &&
-                  cell->face(f)->boundary_id() == 2)
+              if (!cell->face(f)->at_boundary())
+                continue;
+
+              const auto condition =
+                traction_conditions.find(cell->face(f)->boundary_id());
+
+              if (condition != traction_conditions.end())
                 {
                   fe_face_values.reinit(cell, f);
 
@@ -246,9 +301,19 @@ Stokes::assemble()
                     {
                       for (unsigned int i = 0; i < dofs_per_cell; ++i)
                         {
+                          const Point<dim> &point =
+                            fe_face_values.quadrature_point(q);
+                          const Tensor<1, dim> &normal =
+                            fe_face_values.normal_vector(q);
+                          const Tensor<1, dim> traction =
+                            theta * condition->second(point, normal, time) +
+                            (1.0 - theta) *
+                              condition->second(point,
+                                                normal,
+                                                time - current_delta_t);
+
                           cell_rhs(i) +=
-                            -p_out *
-                            scalar_product(fe_face_values.normal_vector(q),
+                            scalar_product(traction,
                                            fe_face_values[velocity].value(i,
                                                                           q)) *
                             fe_face_values.JxW(q);
@@ -271,36 +336,33 @@ Stokes::assemble()
 
   // Dirichlet boundary conditions.
   {
-    std::map<types::global_dof_index, double>           boundary_values;
-    std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-
+    std::map<types::global_dof_index, double> boundary_values;
     ComponentMask mask_velocity(dim + 1, true);
     mask_velocity.set(dim, false);
 
-    // We interpolate first the inlet velocity condition alone, then the wall
-    // condition alone, so that the latter "win" over the former where the two
-    // boundaries touch.
-    boundary_functions[0] = &inlet_velocity;
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values,
-                                             mask_velocity);
+    for (const auto &[boundary_id, function] : dirichlet_conditions)
+      {
+        const VectorFunctionWrapper wrapper(function, time);
+        const std::map<types::boundary_id, const Function<dim> *> condition = {
+          {boundary_id, &wrapper}};
+        VectorTools::interpolate_boundary_values(dof_handler,
+                                                 condition,
+                                                 boundary_values,
+                                                 mask_velocity);
+      }
 
-    boundary_functions.clear();
-    Functions::ZeroFunction<dim> zero_function(dim + 1);
-    boundary_functions[1] = &zero_function;
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values,
-                                             mask_velocity);
+    if (fix_pressure_nullspace &&
+        locally_relevant_dofs.is_element(n_velocity_dofs))
+      boundary_values[n_velocity_dofs] = 0.0;
 
     MatrixTools::apply_boundary_values(
       boundary_values, system_matrix, solution_owned, system_rhs, false);
   }
 }
 
+template <unsigned int dim>
 void
-Stokes::solve()
+TransientStokes<dim>::solve()
 {
   pcout << "===============================================" << std::endl;
 
@@ -325,8 +387,9 @@ Stokes::solve()
   solution = solution_owned;
 }
 
+template <unsigned int dim>
 void
-Stokes::output()
+TransientStokes<dim>::output()
 {
   pcout << "===============================================" << std::endl;
 
@@ -349,12 +412,62 @@ Stokes::output()
 
   data_out.build_patches();
 
-  const std::string output_file_name = "output-stokes";
-  data_out.write_vtu_with_pvtu_record("./",
-                                      output_file_name,
-                                      0,
-                                      MPI_COMM_WORLD);
+  const std::string output_file_name = "output-transient-stokes";
+  const std::string pvtu_file_name =
+    data_out.write_vtu_with_pvtu_record("./",
+                                        output_file_name,
+                                        timestep_number,
+                                        MPI_COMM_WORLD);
+
+  if (mpi_rank == 0)
+    {
+      times_and_names.emplace_back(time, pvtu_file_name);
+      std::ofstream pvd_output(output_file_name + ".pvd");
+      DataOutBase::write_pvd_record(pvd_output, times_and_names);
+    }
 
   pcout << "Output written to " << output_file_name << std::endl;
   pcout << "===============================================" << std::endl;
 }
+
+template <unsigned int dim>
+void
+TransientStokes<dim>::run()
+{
+  AssertThrow(final_time > 0.0, ExcMessage("Final time must be positive."));
+  AssertThrow(delta_t > 0.0, ExcMessage("Time step must be positive."));
+  AssertThrow(theta >= 0.0 && theta <= 1.0,
+              ExcMessage("Theta must be between zero and one."));
+
+  setup();
+  times_and_names.clear();
+
+  const VectorFunctionWrapper initial(initial_condition, 0.0);
+  VectorTools::interpolate(dof_handler, initial, solution_owned);
+  solution     = solution_owned;
+  old_solution = solution;
+
+  time            = 0.0;
+  timestep_number = 0;
+  output();
+
+  while (time < final_time - 1.0e-12)
+    {
+      current_delta_t = std::min(delta_t, final_time - time);
+      time += current_delta_t;
+      ++timestep_number;
+
+      pcout << "Timestep " << std::setw(3) << timestep_number
+            << ", time = " << std::fixed << std::setprecision(2) << time
+            << std::endl;
+
+      assemble();
+      solve();
+
+      old_solution = solution;
+      output();
+    }
+}
+
+template class TransientStokes<2>;
+template class TransientStokes<3>;

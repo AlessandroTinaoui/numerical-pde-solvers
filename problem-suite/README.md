@@ -10,8 +10,8 @@ problems, so one directory can be copied and submitted on its own.
 | `transient-adr` | Heat and transient advection-diffusion-reaction |
 | `nonlinear-diffusion` | Nonlinear scalar diffusion solved with Newton's method |
 | `linear-elasticity` | Vector-valued linear elasticity |
-| `stokes` | Mixed velocity-pressure Stokes problems |
-| `navier-stokes` | Steady Navier-Stokes with Picard linearization |
+| `steady-stokes` | Steady Stokes and generalized-Stokes problems |
+| `transient-stokes` | Transient Stokes with Backward Euler |
 | `domain-decomposition` | Dirichlet-Neumann domain decomposition |
 
 The original `lab-*` directories are unchanged.

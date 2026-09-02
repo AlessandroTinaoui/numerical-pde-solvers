@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(navier_stokes LANGUAGES CXX C)
+project(transient_stokes LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,7 @@ find_package(deal.II 9.3.1 REQUIRED
   HINTS ${DEAL_II_DIR} $ENV{DEAL_II_DIR} $ENV{mkDealiiPrefix})
 deal_ii_initialize_cached_variables()
 
-add_executable(exercise exercise.cpp NavierStokes.cpp)
+add_executable(exercise exercise.cpp TransientStokes.cpp)
 deal_ii_setup_target(exercise)
 
 add_custom_target(data-cleanup

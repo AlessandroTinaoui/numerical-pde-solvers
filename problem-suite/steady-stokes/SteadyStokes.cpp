@@ -1,7 +1,8 @@
-#include "NavierStokes.hpp"
+#include "SteadyStokes.hpp"
 
+template <unsigned int dim>
 void
-NavierStokes::setup()
+SteadyStokes<dim>::setup()
 {
   // Create the mesh.
   {
@@ -81,6 +82,7 @@ NavierStokes::setup()
       DoFTools::count_dofs_per_fe_block(dof_handler, block_component);
     const unsigned int n_u = dofs_per_block[0];
     const unsigned int n_p = dofs_per_block[1];
+    n_velocity_dofs         = n_u;
 
     block_owned_dofs.resize(2);
     block_relevant_dofs.resize(2);
@@ -156,8 +158,9 @@ NavierStokes::setup()
   }
 }
 
+template <unsigned int dim>
 void
-NavierStokes::assemble()
+SteadyStokes<dim>::assemble()
 {
   pcout << "===============================================" << std::endl;
   pcout << "Assembling the system" << std::endl;
@@ -173,6 +176,7 @@ NavierStokes::assemble()
   FEFaceValues<dim> fe_face_values(*fe,
                                    *quadrature_face,
                                    update_values | update_normal_vectors |
+                                     update_quadrature_points |
                                      update_JxW_values);
 
   FullMatrix<double> cell_matrix(dofs_per_cell, dofs_per_cell);
@@ -188,15 +192,12 @@ NavierStokes::assemble()
   FEValuesExtractors::Vector velocity(0);
   FEValuesExtractors::Scalar pressure(dim);
 
-  std::vector<Tensor<1, dim>> convection_velocity(n_q);
-
   for (const auto &cell : dof_handler.active_cell_iterators())
     {
       if (!cell->is_locally_owned())
         continue;
 
       fe_values.reinit(cell);
-      fe_values[velocity].get_function_values(solution, convection_velocity);
 
       cell_matrix               = 0.0;
       cell_rhs                  = 0.0;
@@ -204,22 +205,31 @@ NavierStokes::assemble()
 
       for (unsigned int q = 0; q < n_q; ++q)
         {
+          const double mu_loc = mu(fe_values.quadrature_point(q));
+          const double alpha_loc =
+            alpha(fe_values.quadrature_point(q));
+          const Tensor<1, dim> forcing_loc =
+            forcing(fe_values.quadrature_point(q));
+
+          AssertThrow(mu_loc > 0.0,
+                      ExcMessage("The viscosity coefficient must be positive."));
+
           for (unsigned int i = 0; i < dofs_per_cell; ++i)
             {
               for (unsigned int j = 0; j < dofs_per_cell; ++j)
                 {
                   // Viscosity term.
                   cell_matrix(i, j) +=
-                    nu *
+                    mu_loc *
                     scalar_product(fe_values[velocity].gradient(i, q),
                                    fe_values[velocity].gradient(j, q)) *
                     fe_values.JxW(q);
 
-                  // Linearized convection: (u_old . grad) u.
+                  // Generalized-Stokes reaction term.
                   cell_matrix(i, j) +=
-                    scalar_product(fe_values[velocity].gradient(j, q) *
-                                     convection_velocity[q],
-                                   fe_values[velocity].value(i, q)) *
+                    alpha_loc *
+                    scalar_product(fe_values[velocity].value(i, q),
+                                   fe_values[velocity].value(j, q)) *
                     fe_values.JxW(q);
 
                   // Pressure term in the momentum equation.
@@ -235,10 +245,15 @@ NavierStokes::assemble()
                   // Pressure mass matrix.
                   cell_pressure_mass_matrix(i, j) +=
                     fe_values[pressure].value(i, q) *
-                    fe_values[pressure].value(j, q) / nu * fe_values.JxW(q);
+                    fe_values[pressure].value(j, q) / mu_loc *
+                    fe_values.JxW(q);
                 }
 
-              // There is no forcing term.
+              // Volumetric forcing term.
+              cell_rhs(i) +=
+                scalar_product(forcing_loc,
+                               fe_values[velocity].value(i, q)) *
+                fe_values.JxW(q);
             }
         }
 
@@ -247,8 +262,13 @@ NavierStokes::assemble()
         {
           for (unsigned int f = 0; f < cell->n_faces(); ++f)
             {
-              if (cell->face(f)->at_boundary() &&
-                  cell->face(f)->boundary_id() == 2)
+              if (!cell->face(f)->at_boundary())
+                continue;
+
+              const auto condition =
+                traction_conditions.find(cell->face(f)->boundary_id());
+
+              if (condition != traction_conditions.end())
                 {
                   fe_face_values.reinit(cell, f);
 
@@ -256,9 +276,12 @@ NavierStokes::assemble()
                     {
                       for (unsigned int i = 0; i < dofs_per_cell; ++i)
                         {
+                          const Tensor<1, dim> traction = condition->second(
+                            fe_face_values.quadrature_point(q),
+                            fe_face_values.normal_vector(q));
+
                           cell_rhs(i) +=
-                            -p_out *
-                            scalar_product(fe_face_values.normal_vector(q),
+                            scalar_product(traction,
                                            fe_face_values[velocity].value(i,
                                                                           q)) *
                             fe_face_values.JxW(q);
@@ -281,36 +304,31 @@ NavierStokes::assemble()
 
   // Dirichlet boundary conditions.
   {
-    std::map<types::global_dof_index, double>           boundary_values;
-    std::map<types::boundary_id, const Function<dim> *> boundary_functions;
-
+    std::map<types::global_dof_index, double> boundary_values;
     ComponentMask mask_velocity(dim + 1, true);
     mask_velocity.set(dim, false);
 
-    // We interpolate first the inlet velocity condition alone, then the wall
-    // condition alone, so that the latter "win" over the former where the two
-    // boundaries touch.
-    boundary_functions[0] = &inlet_velocity;
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values,
-                                             mask_velocity);
+    for (const auto &[boundary_id, function] : dirichlet_conditions)
+      {
+        const DirichletConditions condition = {{boundary_id, function}};
+        VectorTools::interpolate_boundary_values(dof_handler,
+                                                 condition,
+                                                 boundary_values,
+                                                 mask_velocity);
+      }
 
-    boundary_functions.clear();
-    Functions::ZeroFunction<dim> zero_function(dim + 1);
-    boundary_functions[1] = &zero_function;
-    VectorTools::interpolate_boundary_values(dof_handler,
-                                             boundary_functions,
-                                             boundary_values,
-                                             mask_velocity);
+    if (fix_pressure_nullspace &&
+        locally_relevant_dofs.is_element(n_velocity_dofs))
+      boundary_values[n_velocity_dofs] = 0.0;
 
     MatrixTools::apply_boundary_values(
       boundary_values, system_matrix, solution_owned, system_rhs, false);
   }
 }
 
+template <unsigned int dim>
 void
-NavierStokes::solve()
+SteadyStokes<dim>::solve()
 {
   pcout << "===============================================" << std::endl;
 
@@ -335,34 +353,9 @@ NavierStokes::solve()
   solution = solution_owned;
 }
 
+template <unsigned int dim>
 void
-NavierStokes::solve_nonlinear(const unsigned int max_iterations,
-                              const double tolerance)
-{
-  for (unsigned int iteration = 0; iteration < max_iterations; ++iteration)
-    {
-      TrilinosWrappers::MPI::BlockVector previous = solution_owned;
-
-      assemble();
-      solve();
-
-      TrilinosWrappers::MPI::BlockVector increment = solution_owned;
-      increment -= previous;
-
-      const double increment_norm = increment.l2_norm();
-      pcout << "Picard iteration " << iteration
-            << ": increment = " << increment_norm << std::endl;
-
-      if (increment_norm < tolerance)
-        return;
-    }
-
-  pcout << "Picard iteration reached the maximum number of iterations"
-        << std::endl;
-}
-
-void
-NavierStokes::output()
+SteadyStokes<dim>::output()
 {
   pcout << "===============================================" << std::endl;
 
@@ -385,7 +378,7 @@ NavierStokes::output()
 
   data_out.build_patches();
 
-  const std::string output_file_name = "output-navier-stokes";
+  const std::string output_file_name = "output-stokes";
   data_out.write_vtu_with_pvtu_record("./",
                                       output_file_name,
                                       0,
@@ -394,3 +387,6 @@ NavierStokes::output()
   pcout << "Output written to " << output_file_name << std::endl;
   pcout << "===============================================" << std::endl;
 }
+
+template class SteadyStokes<2>;
+template class SteadyStokes<3>;

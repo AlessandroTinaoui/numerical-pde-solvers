@@ -1,5 +1,5 @@
-#ifndef NAVIER_STOKES_HPP
-#define NAVIER_STOKES_HPP
+#ifndef STEADY_STOKES_HPP
+#define STEADY_STOKES_HPP
 
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -31,51 +31,26 @@
 #include <deal.II/numerics/vector_tools.h>
 
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <map>
+#include <string>
 
 using namespace dealii;
 
-// Class implementing a solver for the NavierStokes problem.
-class NavierStokes
+// Class implementing a solver for the Stokes problem.
+template <unsigned int dim>
+class SteadyStokes
 {
 public:
-  // Physical dimension (1D, 2D, 3D)
-  static constexpr unsigned int dim = 3;
-
-  // Function for inlet velocity. This actually returns an object with four
-  // components (one for each velocity component, and one for the pressure), but
-  // then only the first three are really used (see the component mask when
-  // applying boundary conditions at the end of assembly). If we only return
-  // three components, however, we may get an error message due to this function
-  // being incompatible with the finite element space.
-  class InletVelocity : public Function<dim>
-  {
-  public:
-    InletVelocity()
-      : Function<dim>(dim + 1)
-    {}
-
-    virtual void
-    vector_value(const Point<dim> &p, Vector<double> &values) const override
-    {
-      values[0] = -alpha * p[1] * (2.0 - p[1]) * (1.0 - p[2]) * (2.0 - p[2]);
-
-      for (unsigned int i = 1; i < dim + 1; ++i)
-        values[i] = 0.0;
-    }
-
-    virtual double
-    value(const Point<dim> &p, const unsigned int component = 0) const override
-    {
-      if (component == 0)
-        return -alpha * p[1] * (2.0 - p[1]) * (1.0 - p[2]) * (2.0 - p[2]);
-      else
-        return 0.0;
-    }
-
-  protected:
-    const double alpha = 1.0;
-  };
+  using ScalarFunction = std::function<double(const Point<dim> &)>;
+  using VectorFunction = std::function<Tensor<1, dim>(const Point<dim> &)>;
+  using TractionFunction = std::function<Tensor<1, dim>(
+    const Point<dim> &, const Tensor<1, dim> &)>;
+  using DirichletConditions =
+    std::map<types::boundary_id, const Function<dim> *>;
+  using TractionConditions =
+    std::map<types::boundary_id, TractionFunction>;
 
   // Since we're working with block matrices, we need to make our own
   // preconditioner class. A preconditioner class can be any class that exposes
@@ -220,14 +195,24 @@ public:
   };
 
   // Constructor.
-  NavierStokes(const std::string &mesh_file_name_,
-               const unsigned int degree_velocity_,
-               const unsigned int degree_pressure_,
-               const double nu_)
+  SteadyStokes(const std::string          &mesh_file_name_,
+               const unsigned int         degree_velocity_,
+               const unsigned int         degree_pressure_,
+               const ScalarFunction      &mu_,
+               const ScalarFunction      &alpha_,
+               const VectorFunction      &forcing_,
+               const DirichletConditions &dirichlet_conditions_,
+               const TractionConditions  &traction_conditions_,
+               const bool                  fix_pressure_nullspace_ = false)
     : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
     , pcout(std::cout, mpi_rank == 0)
-    , nu(nu_)
+    , mu(mu_)
+    , alpha(alpha_)
+    , forcing(forcing_)
+    , dirichlet_conditions(dirichlet_conditions_)
+    , traction_conditions(traction_conditions_)
+    , fix_pressure_nullspace(fix_pressure_nullspace_)
     , mesh_file_name(mesh_file_name_)
     , degree_velocity(degree_velocity_)
     , degree_pressure(degree_pressure_)
@@ -247,10 +232,6 @@ public:
   void
   solve();
 
-  // Picard iteration for the nonlinear convective term.
-  void
-  solve_nonlinear(const unsigned int max_iterations, const double tolerance);
-
   // Output results.
   void
   output();
@@ -269,14 +250,23 @@ protected:
 
   // Problem definition. ///////////////////////////////////////////////////////
 
-  // Kinematic viscosity [m2/s].
-  const double nu;
+  // Viscosity coefficient.
+  const ScalarFunction mu;
 
-  // Outlet pressure [Pa].
-  const double p_out = 10;
+  // Generalized-Stokes reaction coefficient.
+  const ScalarFunction alpha;
 
-  // Inlet velocity.
-  InletVelocity inlet_velocity;
+  // Volumetric force.
+  const VectorFunction forcing;
+
+  // Velocity Dirichlet boundary conditions.
+  const DirichletConditions dirichlet_conditions;
+
+  // Traction boundary conditions.
+  const TractionConditions traction_conditions;
+
+  // Whether to pin one pressure DoF to remove the constant nullspace.
+  const bool fix_pressure_nullspace;
 
   // Discretization. ///////////////////////////////////////////////////////////
 
@@ -288,6 +278,9 @@ protected:
 
   // Polynomial degree used for pressure.
   const unsigned int degree_pressure;
+
+  // Number of velocity DoFs.
+  types::global_dof_index n_velocity_dofs;
 
   // Mesh.
   parallel::fullydistributed::Triangulation<dim> mesh;

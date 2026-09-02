@@ -1,5 +1,5 @@
-#ifndef STOKES_HPP
-#define STOKES_HPP
+#ifndef TRANSIENT_STOKES_HPP
+#define TRANSIENT_STOKES_HPP
 
 #include <deal.II/base/conditional_ostream.h>
 #include <deal.II/base/quadrature_lib.h>
@@ -31,50 +31,51 @@
 #include <deal.II/numerics/vector_tools.h>
 
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <map>
+#include <string>
 
 using namespace dealii;
 
-// Class implementing a solver for the Stokes problem.
-class Stokes
+// Class implementing a solver for the transient generalized-Stokes problem.
+template <unsigned int dim>
+class TransientStokes
 {
 public:
-  // Physical dimension (1D, 2D, 3D)
-  static constexpr unsigned int dim = 3;
+  using ScalarFunction = std::function<double(const Point<dim> &)>;
+  using TimeVectorFunction =
+    std::function<Tensor<1, dim>(const Point<dim> &, double)>;
+  using TimeTractionFunction = std::function<Tensor<1, dim>(
+    const Point<dim> &, const Tensor<1, dim> &, double)>;
+  using DirichletConditions =
+    std::map<types::boundary_id, TimeVectorFunction>;
+  using TractionConditions =
+    std::map<types::boundary_id, TimeTractionFunction>;
 
-  // Function for inlet velocity. This actually returns an object with four
-  // components (one for each velocity component, and one for the pressure), but
-  // then only the first three are really used (see the component mask when
-  // applying boundary conditions at the end of assembly). If we only return
-  // three components, however, we may get an error message due to this function
-  // being incompatible with the finite element space.
-  class InletVelocity : public Function<dim>
+  // Adapter from a vector-valued lambda to a deal.II Function.
+  class VectorFunctionWrapper : public Function<dim>
   {
   public:
-    InletVelocity()
+    VectorFunctionWrapper(const TimeVectorFunction &function_,
+                          const double              time_)
       : Function<dim>(dim + 1)
+      , function(function_)
+      , time(time_)
     {}
-
-    virtual void
-    vector_value(const Point<dim> &p, Vector<double> &values) const override
-    {
-      values[0] = -alpha * p[1] * (2.0 - p[1]) * (1.0 - p[2]) * (2.0 - p[2]);
-
-      for (unsigned int i = 1; i < dim + 1; ++i)
-        values[i] = 0.0;
-    }
 
     virtual double
     value(const Point<dim> &p, const unsigned int component = 0) const override
     {
-      if (component == 0)
-        return -alpha * p[1] * (2.0 - p[1]) * (1.0 - p[2]) * (2.0 - p[2]);
-      else
-        return 0.0;
+      if (component < dim)
+        return function(p, time)[component];
+
+      return 0.0;
     }
 
   protected:
-    const double alpha = 1.0;
+    const TimeVectorFunction function;
+    const double             time;
   };
 
   // Since we're working with block matrices, we need to make our own
@@ -220,18 +221,43 @@ public:
   };
 
   // Constructor.
-  Stokes(const std::string  &mesh_file_name_,
-         const unsigned int &degree_velocity_,
-         const unsigned int &degree_pressure_)
+  TransientStokes(const std::string          &mesh_file_name_,
+                  const unsigned int         degree_velocity_,
+                  const unsigned int         degree_pressure_,
+                  const double               final_time_,
+                  const double               delta_t_,
+                  const ScalarFunction      &mu_,
+                  const ScalarFunction      &alpha_,
+                  const TimeVectorFunction  &forcing_,
+                  const TimeVectorFunction  &initial_condition_,
+                  const DirichletConditions &dirichlet_conditions_,
+                  const TractionConditions  &traction_conditions_,
+                  const double                theta_ = 1.0,
+                  const bool                  fix_pressure_nullspace_ = false)
     : mpi_size(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD))
     , mpi_rank(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD))
     , pcout(std::cout, mpi_rank == 0)
+    , mu(mu_)
+    , alpha(alpha_)
+    , forcing(forcing_)
+    , initial_condition(initial_condition_)
+    , dirichlet_conditions(dirichlet_conditions_)
+    , traction_conditions(traction_conditions_)
+    , theta(theta_)
+    , fix_pressure_nullspace(fix_pressure_nullspace_)
     , mesh_file_name(mesh_file_name_)
     , degree_velocity(degree_velocity_)
     , degree_pressure(degree_pressure_)
+    , final_time(final_time_)
+    , delta_t(delta_t_)
     , mesh(MPI_COMM_WORLD)
   {}
 
+  // Run the time-dependent problem.
+  void
+  run();
+
+protected:
   // Setup system.
   void
   setup();
@@ -248,8 +274,6 @@ public:
   // Output results.
   void
   output();
-
-protected:
   // MPI parallel. /////////////////////////////////////////////////////////////
 
   // Number of MPI processes.
@@ -263,14 +287,29 @@ protected:
 
   // Problem definition. ///////////////////////////////////////////////////////
 
-  // Kinematic viscosity [m2/s].
-  const double nu = 1;
+  // Viscosity coefficient.
+  const ScalarFunction mu;
 
-  // Outlet pressure [Pa].
-  const double p_out = 10;
+  // Generalized-Stokes reaction coefficient.
+  const ScalarFunction alpha;
 
-  // Inlet velocity.
-  InletVelocity inlet_velocity;
+  // Volumetric force.
+  const TimeVectorFunction forcing;
+
+  // Initial velocity.
+  const TimeVectorFunction initial_condition;
+
+  // Velocity Dirichlet boundary conditions.
+  const DirichletConditions dirichlet_conditions;
+
+  // Traction boundary conditions.
+  const TractionConditions traction_conditions;
+
+  // Theta-method parameter (1: Backward Euler, 0.5: Crank-Nicolson).
+  const double theta;
+
+  // Whether to pin one pressure DoF to remove the constant nullspace.
+  const bool fix_pressure_nullspace;
 
   // Discretization. ///////////////////////////////////////////////////////////
 
@@ -282,6 +321,23 @@ protected:
 
   // Polynomial degree used for pressure.
   const unsigned int degree_pressure;
+
+  // Number of velocity DoFs.
+  types::global_dof_index n_velocity_dofs;
+
+  // Final time.
+  const double final_time;
+
+  // Requested time step.
+  const double delta_t;
+
+  // Current time and time-step size.
+  double       time            = 0.0;
+  double       current_delta_t = 0.0;
+  unsigned int timestep_number = 0;
+
+  // Physical times and corresponding PVTU files for ParaView.
+  std::vector<std::pair<double, std::string>> times_and_names;
 
   // Mesh.
   parallel::fullydistributed::Triangulation<dim> mesh;
@@ -325,6 +381,9 @@ protected:
 
   // System solution (including ghost elements).
   TrilinosWrappers::MPI::BlockVector solution;
+
+  // Solution at the previous time step (including ghost elements).
+  TrilinosWrappers::MPI::BlockVector old_solution;
 };
 
 #endif
